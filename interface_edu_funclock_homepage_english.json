@@ -1,0 +1,39 @@
+{
+  "project": "edubox",
+  "path": "/edu/funclock/homepage/english",
+  "method": "GET",
+  "schema": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "/edu/funclock/homepage/english",
+    "type": "object",
+    "properties": {
+      "retCode": {"type": "string"},
+      "retMsg": {"type": "string"},
+      "data": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "action_template": {"type": "string"},
+            "name": {"type": "string"},
+            "img": {"type": "string"},
+            "list": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {"type": "string"},
+                  "url": {"type": "string"}
+                },
+                "required": ["name", "url"]
+              }
+            }
+          },
+          "required": ["action_template", "name", "img"]
+        }
+      }
+    },
+    "required": ["retCode", "retMsg", "data"]
+  },
+  "description": "edu/funclock/homepage/english 标准接口"
+}
