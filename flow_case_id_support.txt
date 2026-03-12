@@ -1,0 +1,36 @@
+﻿已支持 flow step 使用 case_id：
+
+1) step 可以只写 case_id
+{
+  "name": "英语首页流程",
+  "steps": [
+    {"case_id": 1}
+  ]
+}
+
+2) step 可以覆盖字段（优先级高于用例）
+{
+  "name": "英语首页流程",
+  "steps": [
+    {
+      "case_id": 1,
+      "params": {
+        "isencode": {"type":"fixed","value":1}
+      }
+    }
+  ]
+}
+
+规则：
+- case_id 对应 TestCase
+- 执行时自动取 case 的 api_id/params/assertions/extract/expected_status
+- 如果 step 自身提供 params/assertions/extract/expected_status/name，会覆盖用例配置
+- 不能同时写 case_id 和 api_id（解析器会报错）
+
+对应代码改动：
+- dsl/parser.py：step 校验支持 case_id
+- dsl/executor.py：根据 case_id 加载用例并合并执行
+
+#注意:
+- case 必须 enabled=true，否则执行报错
+- expected_status 默认 200

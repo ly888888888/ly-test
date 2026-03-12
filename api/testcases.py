@@ -24,6 +24,7 @@ def list_testcases():
         'test_type': c.test_type,
         'params': c.params,
         'assertions': c.assertions,
+        'extract': c.extract,
         'enabled': c.enabled
     } for c in cases])
 
@@ -45,6 +46,7 @@ def create_testcase():
         test_type=data['test_type'],
         params=data['params'],
         assertions=data.get('assertions'),
+        extract=data.get('extract'),
         expected_status=data.get('expected_status', 200),
         enabled=data.get('enabled', True)
     )
@@ -64,6 +66,7 @@ def get_testcase(id):
         'test_type': case.test_type,
         'params': case.params,
         'assertions': case.assertions,
+        'extract': case.extract,
         'expected_status': case.expected_status,
         'enabled': case.enabled
     })
@@ -72,7 +75,7 @@ def get_testcase(id):
 def update_testcase(id):
     case = TestCase.query.get_or_404(id)
     data = request.get_json()
-    for field in ['project', 'name', 'description', 'api_id', 'test_type', 'params', 'assertions', 'expected_status', 'enabled']:
+    for field in ['project', 'name', 'description', 'api_id', 'test_type', 'params', 'assertions', 'extract', 'expected_status', 'enabled']:
         if field in data:
             setattr(case, field, data[field])
     db.session.commit()

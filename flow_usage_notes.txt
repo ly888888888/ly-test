@@ -1,0 +1,47 @@
+﻿可以这样理解：
+
+- POST /api/testcases 返回的 id 是单个用例 ID，用于 /api/run/testcase/<id> 或 /api/run/suite 的 case_ids。
+- 测试流程（flow）不是用 case_ids 组装的，而是单独用 /api/flows 创建，里面每个 step 直接写 api_id + params + assertions + extract。
+
+1) suite 方式（case_ids）
+{
+  "case_ids": [1],
+  "host": "je-funtv.bestv.com.cn",
+  "host_compare": "172.17.12.101:9600",
+  "loop_times": 2
+}
+这里的 1 就是 /api/testcases 返回的 id。
+
+2) 创建测试流程（Flow）
+用 /api/flows 创建，steps 里直接写 api_id/params/assertions。
+
+示例：
+POST http://172.17.7.156:5000/api/flows
+{
+  "name": "英语首页流程",
+  "steps": [
+    {
+      "name": "step1",
+      "api_id": 1,
+      "params": {
+        "isencode": {"type":"fixed","value":1}
+      },
+      "assertions": [
+        {"type":"path","path":"data[0]","operator":"ne","value":null}
+      ]
+    }
+  ]
+}
+
+执行流程：
+POST http://172.17.7.156:5000/api/flows/<flow_id>/run
+{
+  "host": "je-funtv.bestv.com.cn"
+}
+
+结论：
+- case_ids 只适用于用例执行 / 批量执行
+- 测试流程用 /api/flows 创建，步骤里直接写 api_id/params/assertions/extract
+- 流程执行走 /api/flows/<id>/run
+
+如果要把现有多个 testcases 自动转成一个 flow，可以提供脚本或接口方案。

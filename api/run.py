@@ -1,4 +1,4 @@
-import json
+﻿import json
 import uuid
 import time
 from datetime import datetime
@@ -7,11 +7,14 @@ from models import db, TestCase, TestResult, ApiDefinition
 from tools.http_client import HttpClient, RAWJSON
 from tools.json_validate import struct_validate_get, struct_validate_post, struct_validate_put, struct_validate_delete
 from tools.conf import TestLogInfo, TestAssert
-from .utils import resolve_params, get_value_by_path, compare_value
-from api import custom_functions
+from .utils import resolve_params, resolve_variables
 from tools import compare_test_common
+from dsl.context import Context
+from dsl.extractor import Extractor
+from dsl.assertion import AssertionEngine
 
 run_bp = Blueprint('run', __name__)
+
 
 def execute_case(case_id, host, run_id=None, host_compare=None):
     """
@@ -25,9 +28,11 @@ def execute_case(case_id, host, run_id=None, host_compare=None):
 
     api = case.api
     method = api.method.upper()
+    context = Context()
     # 解析参数
     try:
         params = resolve_params(case.params)
+        params = resolve_variables(params, context)
     except Exception as e:
         # 参数解析失败记录为 error
         result = TestResult(
@@ -58,7 +63,6 @@ def execute_case(case_id, host, run_id=None, host_compare=None):
     start = time.time()
     try:
         if case.test_type == 'smoke':
-
             # 发送请求
             if method == 'GET':
                 res = HttpClient.http_get(url, bPrint=False)
@@ -76,7 +80,7 @@ def execute_case(case_id, host, run_id=None, host_compare=None):
             error_info = '' if success else f'HTTP status {http_status} != {case.expected_status}'
             response_body = res.text if res else ''
         elif case.test_type == 'structural':
-            # 使用json_validate
+            # 使用 json_validate
             tli = TestLogInfo()
             tli.url = url
             tli.api_id = case.id
@@ -117,36 +121,17 @@ def execute_case(case_id, host, run_id=None, host_compare=None):
             if not success:
                 error_info = f'HTTP status {http_status} != {case.expected_status}'
             else:
-                # 处理断言（从 case.assertions 读取）
+                # 断言
                 assertions = case.assertions or []
                 for assertion in assertions:
-                    assert_type = assertion.get('type')
-                    if assert_type == 'path':
-                        path = assertion['path']
-                        op = assertion['operator']
-                        expected = assertion['value']
-                        actual = get_value_by_path(response_json, path)
-                        if not compare_value(actual, op, expected):
-                            success = False
-                            error_info += f"Assertion failed: {path} {op} {expected}, actual={actual}; "
-                    elif assert_type == 'function':
-                        func_name = assertion['function']
-                        func_args = assertion.get('args', {})
-                        # 解析引用动态params里面的key
-                        for k, v in func_args.items():
-                            if isinstance(v, str) and v.startswith('$ref:'):
-                                ref_key = v[5:]
-                                func_args[k] = params.get(ref_key)
-                        func = getattr(custom_functions, func_name, None)
-                        if func:
-                            # 将响应和参数传入
-                            ok, msg = func(response_json, **func_args)
-                            if not ok:
-                                success = False
-                                error_info += msg + "; "
-                        else:
-                            success = False
-                            error_info += f"Function {func_name} not found; "
+                    ok, msg = AssertionEngine.assert_one(assertion, response_json, context)
+                    if not ok:
+                        success = False
+                        error_info += msg + "; "
+                # 提取变量
+                if case.extract:
+                    extracted = Extractor.extract(response_json, case.extract)
+                    context.set_by_path(f"steps.{case.name}", extracted)
             response_body = res.text if res else ''
         elif case.test_type == 'compare':
             host_old = host
@@ -212,6 +197,7 @@ def execute_case(case_id, host, run_id=None, host_compare=None):
         'duration_ms': duration
     }
 
+
 @run_bp.route('/testcase/<int:case_id>', methods=['POST'])
 def run_single(case_id):
     data = request.get_json() or {}
@@ -221,6 +207,7 @@ def run_single(case_id):
     result = execute_case(case_id, host, run_id, host_compare=host_compare)
     result['run_id'] = run_id
     return jsonify(result)
+
 
 @run_bp.route('/suite', methods=['POST'])
 def run_suite():
@@ -238,6 +225,7 @@ def run_suite():
             res = execute_case(cid, host, run_id, host_compare=host_compare)
             all_results.append(res)
     return jsonify({'run_id': run_id, 'results': all_results})
+
 
 @run_bp.route('/results/<run_id>', methods=['GET'])
 def get_results(run_id):

@@ -1,0 +1,24 @@
+﻿在这个框架里，step1 并不是直接写 URL，它是通过 api_id 找接口定义，再用执行时传入的 host 组装请求。流程如下：
+
+1) step1.api_id = 1
+2) 执行时在数据库里查 ApiDefinition(id=1)
+3) 接口定义里有 path / method / schema
+4) 运行时传入 host
+5) 最终请求 URL = host + path + query(params)
+
+也就是说：
+step1 对应哪个接口，完全由 api_id 决定；
+api_id 对应哪条接口定义，去 /api/interfaces/<id> 就能看到。
+
+验证方式：
+- 查看接口定义：
+  curl http://172.17.7.156:5000/api/interfaces/1
+- 里面的 path 就是 step1 实际调用的路由
+
+公式：
+URL = http://{host}{path}?{query_string}
+
+#注意:
+- step 不需要写 URL，因为 URL 是通过接口定义 + host 拼出来的
+- host 在 /api/flows/<id>/run 的请求体里传入
+- params 会转换为 query 参数（GET）或 body（POST）

@@ -5,6 +5,7 @@ from api.interfaces import interfaces_bp
 from api.testcases import testcases_bp
 from api.run import run_bp
 from api.functions import functions_bp
+from api.flows import flows_bp
 
 def create_app():
     app = Flask(__name__)
@@ -16,6 +17,7 @@ def create_app():
     app.register_blueprint(testcases_bp, url_prefix='/api/testcases')
     app.register_blueprint(run_bp, url_prefix='/api/run')
     app.register_blueprint(functions_bp, url_prefix='/api/functions')
+    app.register_blueprint(flows_bp, url_prefix='/api/flows')
 
     return app
 

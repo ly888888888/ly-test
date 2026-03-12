@@ -62,6 +62,44 @@ class TestFlow(db.Model):
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     steps = db.Column(db.JSON, nullable=False)  # 步骤列表，每个步骤包含 api_id, params, extract, assertions 等
+    data_source = db.Column(db.JSON, nullable=True)
     enabled = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class FlowRun(db.Model):
+    __tablename__ = 'flow_run'
+    id = db.Column(db.Integer, primary_key=True)
+    flow_id = db.Column(db.Integer, db.ForeignKey('test_flow.id'), nullable=False)
+    run_id = db.Column(db.String(64), nullable=False)
+    status = db.Column(db.Enum('running', 'success', 'fail', 'error'), nullable=False)
+    error_info = db.Column(db.Text)
+    start_time = db.Column(db.DateTime)
+    end_time = db.Column(db.DateTime)
+    duration_ms = db.Column(db.Integer)
+
+    flow = db.relationship('TestFlow', backref=db.backref('runs', lazy=True))
+
+
+class FlowStepResult(db.Model):
+    __tablename__ = 'flow_step_result'
+    id = db.Column(db.Integer, primary_key=True)
+    flow_run_id = db.Column(db.Integer, db.ForeignKey('flow_run.id'), nullable=False)
+    step_name = db.Column(db.String(200))
+    step_type = db.Column(db.String(50))
+    step_index = db.Column(db.Integer)
+    iteration_index = db.Column(db.Integer)
+    case_id = db.Column(db.Integer, db.ForeignKey('test_case.id'), nullable=True)
+    api_id = db.Column(db.Integer, db.ForeignKey('api_definition.id'), nullable=True)
+    status = db.Column(db.Enum('success', 'fail', 'error'), nullable=False)
+    http_status = db.Column(db.Integer)
+    response_body = db.Column(db.Text)
+    error_info = db.Column(db.Text)
+    extracted = db.Column(db.JSON)
+    data_row = db.Column(db.JSON)
+    start_time = db.Column(db.DateTime)
+    end_time = db.Column(db.DateTime)
+    duration_ms = db.Column(db.Integer)
+
+    run = db.relationship('FlowRun', backref=db.backref('steps', lazy=True))

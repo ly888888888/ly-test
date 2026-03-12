@@ -6,9 +6,15 @@ interfaces_bp = Blueprint('interfaces', __name__)
 @interfaces_bp.route('', methods=['GET'])
 def list_interfaces():
     project = request.args.get('project')
+    path = request.args.get('path')
+    method = request.args.get('method')
     query = ApiDefinition.query
     if project:
         query = query.filter_by(project=project)
+    if path:
+        query = query.filter_by(path=path)
+    if method:
+        query = query.filter_by(method=method)
     interfaces = query.all()
     return jsonify([{
         'id': i.id,
