@@ -1,16 +1,19 @@
 from flask import Blueprint, jsonify
 from api import custom_functions
 from flask import request
+from api.auth import require_permissions
 
 functions_bp = Blueprint('functions', __name__)
 
 @functions_bp.route('/', methods=['GET'])
+@require_permissions('function:read')
 def list_functions():
     """返回所有注册函数的可读信息"""
     funcs = custom_functions.get_registered_functions()
     return jsonify(funcs)
 
 @functions_bp.route('/<name>', methods=['GET'])
+@require_permissions('function:read')
 def get_function_detail(name):
     """返回单个函数的详细信息"""
     func_info = custom_functions._FUNCTION_REGISTRY.get(name)  # 直接访问注册表
@@ -24,6 +27,7 @@ def get_function_detail(name):
     })
 
 @functions_bp.route('/execute', methods=['POST'])
+@require_permissions('function:execute')
 def execute_function_api():
     """
     执行指定函数

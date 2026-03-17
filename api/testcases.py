@@ -1,9 +1,11 @@
 from flask import Blueprint, request, jsonify
 from models import db, TestCase, ApiDefinition
+from api.auth import require_permissions
 
 testcases_bp = Blueprint('testcases', __name__)
 
 @testcases_bp.route('', methods=['GET'])
+@require_permissions('testcase:read', allow_anonymous=True)
 def list_testcases():
     project = request.args.get('project')
     api_id = request.args.get('api_id')
@@ -29,6 +31,7 @@ def list_testcases():
     } for c in cases])
 
 @testcases_bp.route('', methods=['POST'])
+@require_permissions('testcase:write')
 def create_testcase():
     data = request.get_json()
     required = ['project', 'name', 'api_id', 'test_type', 'params']
@@ -55,6 +58,7 @@ def create_testcase():
     return jsonify({'id': case.id}), 201
 
 @testcases_bp.route('/<int:id>', methods=['GET'])
+@require_permissions('testcase:read', allow_anonymous=True)
 def get_testcase(id):
     case = TestCase.query.get_or_404(id)
     return jsonify({
@@ -72,6 +76,7 @@ def get_testcase(id):
     })
 
 @testcases_bp.route('/<int:id>', methods=['PUT'])
+@require_permissions('testcase:write')
 def update_testcase(id):
     case = TestCase.query.get_or_404(id)
     data = request.get_json()
@@ -82,6 +87,7 @@ def update_testcase(id):
     return jsonify({'message': 'updated'})
 
 @testcases_bp.route('/<int:id>', methods=['DELETE'])
+@require_permissions('testcase:write')
 def delete_testcase(id):
     case = TestCase.query.get_or_404(id)
     db.session.delete(case)

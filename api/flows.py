@@ -1,12 +1,14 @@
-﻿from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app
 from models import db, TestFlow, FlowRun, FlowStepResult
 from dsl.executor import execute_flow
 from dsl.parser import validate_flow_steps
+from api.auth import require_permissions
 
 flows_bp = Blueprint('flows', __name__)
 
 
 @flows_bp.route('', methods=['GET'])
+@require_permissions('flow:read', allow_anonymous=True)
 def list_flows():
     query = TestFlow.query
     flows = query.all()
@@ -21,6 +23,7 @@ def list_flows():
 
 
 @flows_bp.route('/<int:flow_id>', methods=['GET'])
+@require_permissions('flow:read', allow_anonymous=True)
 def get_flow(flow_id):
     flow = TestFlow.query.get_or_404(flow_id)
     return jsonify({
@@ -34,6 +37,7 @@ def get_flow(flow_id):
 
 
 @flows_bp.route('', methods=['POST'])
+@require_permissions('flow:write')
 def create_flow():
     data = request.get_json() or {}
     required = ['name', 'steps']
@@ -58,6 +62,7 @@ def create_flow():
 
 
 @flows_bp.route('/<int:flow_id>', methods=['PUT'])
+@require_permissions('flow:write')
 def update_flow(flow_id):
     flow = TestFlow.query.get_or_404(flow_id)
     data = request.get_json() or {}
@@ -74,6 +79,7 @@ def update_flow(flow_id):
 
 
 @flows_bp.route('/<int:flow_id>', methods=['DELETE'])
+@require_permissions('flow:write')
 def delete_flow(flow_id):
     flow = TestFlow.query.get_or_404(flow_id)
     db.session.delete(flow)
@@ -82,6 +88,7 @@ def delete_flow(flow_id):
 
 
 @flows_bp.route('/<int:flow_id>/run', methods=['POST'])
+@require_permissions('flow:execute')
 def run_flow(flow_id):
     data = request.get_json() or {}
     host = data.get('host', current_app.config.get('DEFAULT_HOST', '172.17.12.101:9500'))
@@ -91,6 +98,7 @@ def run_flow(flow_id):
 
 
 @flows_bp.route('/results/<run_id>', methods=['GET'])
+@require_permissions('flow:read', allow_anonymous=True)
 def get_flow_results(run_id):
     run = FlowRun.query.filter_by(run_id=run_id).first()
     if not run:

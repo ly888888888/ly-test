@@ -1,9 +1,11 @@
 from flask import Blueprint, request, jsonify
 from models import db, ApiDefinition
+from api.auth import require_permissions
 
 interfaces_bp = Blueprint('interfaces', __name__)
 
 @interfaces_bp.route('', methods=['GET'])
+@require_permissions('interface:read', allow_anonymous=True)
 def list_interfaces():
     project = request.args.get('project')
     path = request.args.get('path')
@@ -26,6 +28,7 @@ def list_interfaces():
     } for i in interfaces])
 
 @interfaces_bp.route('', methods=['POST'])
+@require_permissions('interface:write')
 def create_interface():
     data = request.get_json()
     required = ['project', 'path', 'method', 'schema']
@@ -43,6 +46,7 @@ def create_interface():
     return jsonify({'id': interface.id}), 201
 
 @interfaces_bp.route('/<int:id>', methods=['GET'])
+@require_permissions('interface:read', allow_anonymous=True)
 def get_interface(id):
     interface = ApiDefinition.query.get_or_404(id)
     return jsonify({
@@ -55,6 +59,7 @@ def get_interface(id):
     })
 
 @interfaces_bp.route('/<int:id>', methods=['PUT'])
+@require_permissions('interface:write')
 def update_interface(id):
     interface = ApiDefinition.query.get_or_404(id)
     data = request.get_json()
@@ -65,6 +70,7 @@ def update_interface(id):
     return jsonify({'message': 'updated'})
 
 @interfaces_bp.route('/<int:id>', methods=['DELETE'])
+@require_permissions('interface:write')
 def delete_interface(id):
     interface = ApiDefinition.query.get_or_404(id)
     # 检查是否被用例引用，若有则拒绝删除

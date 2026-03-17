@@ -1,7 +1,40 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+from werkzeug.security import generate_password_hash
 
 db = SQLAlchemy()
+
+class User(db.Model):
+    __tablename__ = 'user'
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(64), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login_at = db.Column(db.DateTime)
+
+    permissions = db.relationship('UserPermission', backref='user', lazy=True, cascade='all, delete-orphan')
+    tokens = db.relationship('UserToken', backref='user', lazy=True, cascade='all, delete-orphan')
+
+class UserPermission(db.Model):
+    __tablename__ = 'user_permission'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    permission = db.Column(db.String(64), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'permission', name='uq_user_permission'),
+    )
+
+class UserToken(db.Model):
+    __tablename__ = 'user_token'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    token = db.Column(db.String(64), unique=True, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    revoked = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class ApiDefinition(db.Model):
     __tablename__ = 'api_definition'
@@ -103,3 +136,24 @@ class FlowStepResult(db.Model):
     duration_ms = db.Column(db.Integer)
 
     run = db.relationship('FlowRun', backref=db.backref('steps', lazy=True))
+
+
+def ensure_default_admin(username, password, permissions=None):
+    """
+    Ensure a default admin user exists.
+    """
+    user = User.query.filter_by(username=username).first()
+    if user:
+        return user
+    user = User(
+        username=username,
+        password_hash=generate_password_hash(password),
+        is_active=True
+    )
+    db.session.add(user)
+    db.session.flush()
+    perms = permissions or ['admin']
+    for p in perms:
+        db.session.add(UserPermission(user_id=user.id, permission=p))
+    db.session.commit()
+    return user

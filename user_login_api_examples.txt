@@ -1,0 +1,38 @@
+# /api/login
+POST /api/login
+Headers:
+  Content-Type: application/json
+Body:
+  {"username":"admin","password":"admin123"}
+
+# /api/logout (requires token)
+POST /api/logout
+Headers:
+  Authorization: Bearer <token>
+
+# /api/users (admin)
+GET /api/users
+Headers:
+  Authorization: Bearer <token>
+
+POST /api/users
+Headers:
+  Authorization: Bearer <token>
+  Content-Type: application/json
+Body:
+  {"username":"u1","password":"p1","is_active":true,"permissions":["interface:read","testcase:write"]}
+
+GET /api/users/1
+Headers:
+  Authorization: Bearer <token>
+
+PUT /api/users/1
+Headers:
+  Authorization: Bearer <token>
+  Content-Type: application/json
+Body (any subset):
+  {"password":"newpass","is_active":false,"permissions":["admin"]}
+
+DELETE /api/users/1
+Headers:
+  Authorization: Bearer <token>

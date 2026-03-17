@@ -12,6 +12,7 @@ from tools import compare_test_common
 from dsl.context import Context
 from dsl.extractor import Extractor
 from dsl.assertion import AssertionEngine
+from api.auth import require_permissions
 
 run_bp = Blueprint('run', __name__)
 
@@ -199,6 +200,7 @@ def execute_case(case_id, host, run_id=None, host_compare=None):
 
 
 @run_bp.route('/testcase/<int:case_id>', methods=['POST'])
+@require_permissions('run:execute')
 def run_single(case_id):
     data = request.get_json() or {}
     host = data.get('host', current_app.config.get('DEFAULT_HOST', '172.17.12.101:9500'))
@@ -210,6 +212,7 @@ def run_single(case_id):
 
 
 @run_bp.route('/suite', methods=['POST'])
+@require_permissions('run:execute')
 def run_suite():
     data = request.get_json()
     if not data or 'case_ids' not in data:
@@ -228,6 +231,7 @@ def run_suite():
 
 
 @run_bp.route('/results/<run_id>', methods=['GET'])
+@require_permissions('run:read')
 def get_results(run_id):
     results = TestResult.query.filter_by(run_id=run_id).all()
     return jsonify([{
