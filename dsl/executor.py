@@ -382,3 +382,36 @@ def execute_flow(flow_id, host, host_compare=None):
     db.session.commit()
 
     return {'flow_id': flow_id, 'run_id': run_id, 'results': results}
+
+
+if __name__ == '__main__':
+    context = Context()
+    # context.set_by_path("age", 25)
+    #
+    # cond = "${age} >= 18"
+    # result = _eval_condition(cond, context)
+    # print(result)  # 输出: True
+
+    # context.set_by_path("user", {"name": "Alice", "score": 85})
+    #
+    # cond = "${user.score} > 80 and ${user.name} != 'Bob'"
+    # # 假设 resolve 将 ${user['score']} 替换为 85，${user['name']} 替换为 'Alice'
+    # # 得到字符串 "85 > 80 and 'Alice' != 'Bob'"
+    # result = _eval_condition(cond, context)
+    # print(result)  # 输出: True
+
+    # cond = True
+    # result = _eval_condition(cond, context)
+    # print(result)  # True
+    #
+    # cond = 0
+    # result = _eval_condition(cond, context)
+    # print(result)  # Fals
+
+    context.set_by_path("a", 10)
+    context.set_by_path("b", 3)
+
+    cond = "${a} % ${b} == 1"
+    # 解析后 "10 % 3 == 1" → True
+    result = _eval_condition(cond, context)
+    print(result)  # True

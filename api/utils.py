@@ -1,3 +1,4 @@
+from dsl.context import Context
 from tools.conf import TestDB  # 复用原有数据库连接
 from api import custom_functions
 
@@ -97,8 +98,8 @@ def resolve_variables(value, context):
         return value
 
 def compare_value(actual, operator, expected):
-    if operator == 'eq':
-        return actual == expected
+    if operator == "eq":
+        return str(actual) == str(expected)
     elif operator == 'ne':
         return actual != expected
     elif operator == 'gt':
@@ -137,12 +138,30 @@ if __name__ == '__main__':
     #   ]
     # }))
 
-    response = {
-        "data": {
-            "items": [
-                {"name": "apple", "price": 10},
-                {"name": "banana", "price": 20}
-            ]
+    # response = {
+    #     "data": {
+    #         "items": [
+    #             {"name": "apple", "price": 10},
+    #             {"name": "banana", "price": 20}
+    #         ]
+    #     }
+    # }
+    # print(get_value_by_path(response, "data.items[0].name"))
+
+    context = Context({
+        "variables": {
+            "token": "abc123",
+            "uid": 10001
+        }
+    })
+    value = {
+        "url": "/api/user",
+        "headers": {
+            "Authorization": "Bearer ${variables.token}"
+        },
+        "body": {
+            "uid": "${variables.uid}",
+            "roles": ["${variables.uid}", "admin"]
         }
     }
-    print(get_value_by_path(response, "data.items[0].name"))
+    print(resolve_variables(value, context))

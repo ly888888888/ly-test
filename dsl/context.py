@@ -27,5 +27,35 @@ class Context(dict):
         """解析字符串中的 ${var} 引用"""
         def replacer(match):
             var_path = match.group(1)
-            return str(self.get_by_path(var_path) or '')
+            value = self.get_by_path(var_path)
+            if value is None:
+                raise ValueError(f"变量 {var_path} 不存在")
+            return repr(value)  # 用 repr 而不是 str
+
         return re.sub(r'\$\{([^}]+)\}', replacer, text)
+
+if __name__ == '__main__':
+    # context = Context({
+    #     "steps": {
+    #         "login": {
+    #             "uid": 10001
+    #         }
+    #     }
+    # })
+    #
+    # print(context.get_by_path("steps.login.uid"))
+
+    # context = Context()
+    #
+    # context.set_by_path("steps.login.uid", 10001)
+    # print(context)
+
+    context = Context({
+        "token": "abc123",
+        "uid": 10001
+    })
+
+    text = "Authorization: Bearer ${token}, uid=${uid}"
+
+    result = context.resolve(text)
+    print(result)

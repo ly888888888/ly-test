@@ -19,3 +19,21 @@ class Extractor:
             else:
                 result[var_name] = None
         return result
+
+if __name__ == '__main__':
+
+    response_json = {
+        "status": 200,
+        "data": {
+            "token": "abc123",
+            "user": {"id": 10001, "name": "Alice"}
+        }
+    }
+    extract_rules = {
+        "token": "$.data.token",
+        "user_id": "$.data.user.id",
+        "user_name": "$.data.user.name"
+    }
+
+    result = Extractor.extract(response_json, extract_rules)
+    print(result)

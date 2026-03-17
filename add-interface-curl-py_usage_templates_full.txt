@@ -1,0 +1,218 @@
+﻿【接口测试用例/流程描述模板（齐全版）】
+
+A. 创建接口 + 全量用例（默认五种）
+/add-interface-curl-py 我现在有个新接口,GET请求,edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1&version=randomVer(),
+接口请求返回结果:{"retCode":"200","retMsg":"ok","data":[]}
+
+B. 创建接口 + 指定用例（smoke/structural/logic/monitor/compare）
+/add-interface-curl-py 我现在有个新接口,GET请求,edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1&version=randomVer(),
+接口请求返回结果:{"retCode":"200","retMsg":"ok","data":[]}
+需要生成smoke、structural、逻辑、监控、对比测试
+
+C. 只生成接口定义（不生成测试用例）
+/add-interface-curl-py 我现在有个新接口,GET请求,edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1&version=randomVer(),
+接口请求返回结果:{...}，只创建接口
+
+D. 非新接口（仅生成测试用例）
+/add-interface-curl-py 我现在有个接口,GET请求,edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1&version=randomVer(),
+接口请求返回结果:{...}
+需要生成smoke、structural、逻辑、监控、对比测试
+
+E. 指定断言（每种用例独立断言）
+/add-interface-curl-py 我现在有个新接口,GET请求,edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1,
+接口请求返回结果:{...}
+需要生成smoke、structural、逻辑、监控、对比测试
+smoke断言，data[0].action_template == sync_lesson
+structural断言，retCode == 200
+logic断言，data[0].name == 同步课文
+monitor断言，data[0].action_template != ""
+compare断言，retMsg == ok
+
+F. 多逻辑用例
+/add-interface-curl-py 我现在有个新接口,GET请求,edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1,
+接口请求返回结果:{...}
+需要生成逻辑测试
+第一个逻辑用例断言是 data[0].action_template == sync_lesson
+第二个逻辑用例断言是 data[0].name == 同步课文
+第三个逻辑用例断言是 data[0].action_template != ""
+
+G. 复杂参数类型（fixed/function/function_with_args/db_query）
+/add-interface-curl-py 我现在有个新接口,GET请求,edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1&strategy_ids=getFoStrategy(num=20)&media_id="SELECT media_id FROM db_jupiter_media.fm_media WHERE disable=0 ORDER BY RAND() LIMIT 1"&version=randomVer(),
+接口请求返回结果:{"retCode":"200","retMsg":"ok","data":[]}
+需要生成smoke测试
+smoke断言，retCode == 200
+
+H. 多步流程（基础）
+/add-interface-curl-py 测试流程如下：
+1) POST /api/interfaces
+请求: {"project":"demo","path":"/user/profile","method":"POST","schema":{"type":"object"}}
+响应: {"id": 12}
+
+2) POST /api/testcases
+请求: {"project":"demo","name":"get_profile_logic","api_id":12,"test_type":"logic","params":{"uid":{"type":"fixed","value":10001}}}
+响应: {"id": 100}
+
+3) POST /api/run/testcase/100
+请求: {"host":"127.0.0.1:5000"}
+响应: {"run_id":"r-001"}
+
+4) GET /api/run/results/r-001
+响应: [{"case_id":100,"status":"success"}]
+
+I. 多步流程（带 params/assertions/extract + 参数传递）
+/add-interface-curl-py 测试流程如下：
+1) POST /api/testcases
+请求: {
+  "project":"demo",
+  "name":"get_profile_logic",
+  "api_id":12,
+  "test_type":"logic",
+  "params":{
+    "uid":{"type":"fixed","value":10001},
+    "version":{"type":"function","function":"randomVer","args":{}},
+    "strategy_id":{"type":"function","function":"getFoStrategy","args":{"num":2}},
+    "scene":{"type":"db_query","sql":"SELECT scene FROM config_scene LIMIT 1"}
+  },
+  "assertions":[
+    {"type":"path","path":"data.user.id","operator":"eq","value":"${uid}"},
+    {"type":"function","function":"check_tabs","args":{"brand":"funshion","version":"${version}"}},
+    {"type":"jsonpath","jsonpath":"$.data.tabs[*].name","operator":"contains","value":"首页"}
+  ],
+  "extract":{"token":"$.data.token","user_id":"$.data.user.id"}
+}
+响应: {"id": 100}
+
+2) POST /api/run/testcase/100
+请求: {"host":"127.0.0.1:5000", "token":"${steps.step1.token}", "uid":"${steps.step1.user_id}"}
+响应: {"run_id":"r-001"}
+
+3) GET /api/run/results/r-001
+请求: {}
+响应: [{"case_id":100,"status":"success"}]
+
+J. 多步流程 + 数据驱动（data_source）
+/add-interface-curl-py 测试流程如下（带数据驱动）：
+数据源: [{"user":"alice","password":"p1"},{"user":"bob","password":"p2"}]
+1) POST /api/login
+请求: {"params":{"user":"${data.user}","password":"${data.password}"},"extract":{"token":"$.data.token"}}
+响应: {"token":"t-001"}
+2) GET /api/profile
+请求: {"params":{"token":"${steps.step1.token}"}}
+响应: {"status":200}
+
+K. compare/monitor 特殊说明
+/add-interface-curl-py 我现在有个新接口,GET请求,edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1,
+接口请求返回结果:{...}
+需要生成compare、monitor测试
+compare断言，retCode == 200
+monitor断言，data != null
+【补充模板：1-6】
+
+1) 结构测试 Schema 手工补充
+/add-interface-curl-py 我现在有个新接口,GET请求,edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1,
+接口请求返回结果:{"retCode":"200","retMsg":"ok","data":[{"id":1,"name":"A"}]}
+需要生成structural测试
+结构断言，retCode == 200
+说明：如生成的 Schema 不够精准，可手工修改 interface_xxx.json 中 schema 字段
+
+2) compare 多环境 host_compare 示例
+/add-interface-curl-py 我现在有个新接口,GET请求,edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1,
+接口请求返回结果:{...}
+需要生成compare测试
+compare断言，retCode == 200
+说明：执行 compare 用例时传 host_compare
+POST /api/run/testcase/{用例ID}
+{"host":"old.xxx.com","host_compare":"new.xxx.com"}
+
+3) monitor 定时/阈值场景
+/add-interface-curl-py 我现在有个接口,GET请求,edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1,
+接口请求返回结果:{...}
+需要生成monitor测试
+monitor断言，data[0].action_template != ""
+说明：调度层可按分钟/小时定时调用 /api/run/suite
+
+4) 多接口批量生成（同项目多接口）
+/add-interface-curl-py 我现在有多个新接口：
+接口1: GET /edu/funclock/homepage/english?isencode=1 返回:{...}
+接口2: GET /edu/funclock/homepage/math?isencode=1 返回:{...}
+接口3: GET /edu/funclock/homepage/chinese?isencode=1 返回:{...}
+需要生成smoke、structural测试
+说明：逐条复制描述执行，或拆成多段分别调用
+
+5) 复杂断言（多条件）
+/add-interface-curl-py 我现在有个新接口,GET请求,edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1,
+接口请求返回结果:{...}
+需要生成logic测试
+逻辑断言是 data[0].action_template == sync_lesson；data[0].name != ""；retCode == 200
+说明：同一用例支持多条断言，用“；/、”分隔
+
+6) 失败用例（预期非200）
+/add-interface-curl-py 我现在有个新接口,GET请求,edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1,
+接口请求返回结果:{...}
+需要生成smoke测试
+smoke断言，retCode != 200
+说明：如需期望状态码非200，可在生成后的 testcases JSON 中手工修改 expected_status
+【补充模板：批量接口自动拆分 + 流程分支】
+
+7) 批量接口自动拆分生成（统一规则）
+/add-interface-curl-py 我现在有多个新接口（统一规则）：
+项目: edubox
+方法: GET
+接口列表:
+- /edu/funclock/homepage/english?isencode=1 返回:{...}
+- /edu/funclock/homepage/math?isencode=1 返回:{...}
+- /edu/funclock/homepage/chinese?isencode=1 返回:{...}
+需要生成smoke、structural测试
+说明：建议拆成多段分别调用，或保持格式一致由脚本逐条识别
+
+8) 流程分支（条件分支 then/else）
+/add-interface-curl-py 测试流程如下（含条件分支）：
+1) POST /api/login
+请求: {"params":{"user":"alice","password":"p1"},"extract":{"token":"$.data.token","is_vip":"$.data.vip"}}
+响应: {"token":"t-001","vip":true}
+
+2) IF 条件: ${steps.step1.is_vip} == True
+THEN:
+2.1) GET /api/vip/reco
+请求: {"params":{"token":"${steps.step1.token}"}}
+响应: {"data":[]}
+ELSE:
+2.2) GET /api/free/reco
+请求: {"params":{"token":"${steps.step1.token}"}}
+响应: {"data":[]}
+
+说明：目前脚本只做顺序 steps 生成，如需显式 condition/then/else，建议在生成后手工调整 flow_xxx.json 的 steps:
+{
+  "type":"condition",
+  "if":"${steps.step1.is_vip} == True",
+  "then":[...],
+  "else":[...]
+}
+【条件分支自动生成示例（脚本已支持）】
+/add-interface-curl-py 测试流程如下（含条件分支）：
+1) POST /api/login
+请求: {"params":{"user":"alice","password":"p1"},"extract":{"token":"$.data.token","is_vip":"$.data.vip"}}
+响应: {"token":"t-001","vip":true}
+
+IF 条件: ${steps.step1.is_vip} == True
+THEN:
+2.1) GET /api/vip/reco
+请求: {"params":{"token":"${steps.step1.token}"}}
+响应: {"data":[]}
+ELSE:
+2.2) GET /api/free/reco
+请求: {"params":{"token":"${steps.step1.token}"}}
+响应: {"data":[]}

@@ -40,3 +40,31 @@ def validate_step(step):
 
 def validate_flow_steps(steps):
     return _validate_steps_list(steps)
+
+if __name__ == '__main__':
+    # 合法
+    step = {"type": "step", "name": "login", "api_id": 1, "params": {"user": "Alice"}}
+    print(validate_step(step))
+
+    # 错误（缺 params）
+    # step = {"type": "step", "name": "login", "api_id": 1}
+    # print(validate_step(step))
+
+    step = {
+        "type": "condition",
+        "if": "${status} == 200",
+        "then": [{"type": "step", "name": "next", "api_id": 2, "params": {}}],
+        "else": [{"type": "step", "name": "fail", "api_id": 3, "params": {}}]
+    }
+
+    print(validate_step(step))
+
+    step = {
+        "type": "loop",
+        "times": 3,
+        "steps": [
+            {"type": "step", "name": "retry", "api_id": 5, "params": {}}
+        ]
+    }
+
+    print(validate_step(step))

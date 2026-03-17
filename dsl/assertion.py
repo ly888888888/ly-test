@@ -2,6 +2,8 @@ from jsonpath_ng import parse
 
 from api.custom_functions import get_function
 from api.utils import get_value_by_path, compare_value, resolve_variables
+from dsl.context import Context
+
 
 class AssertionEngine:
     @staticmethod
@@ -10,11 +12,16 @@ class AssertionEngine:
         atype = assertion.get('type')
         if atype == 'path':
             path = assertion['path']
+            print(path)
             op = assertion['operator']
+            print(op)
             expected = assertion['value']
+            print(expected)
             # Support variable references
             expected = context.resolve(str(expected)) if isinstance(expected, str) else expected
+            print(expected)
             actual = get_value_by_path(actual_value, path)
+            print(actual)
             if not compare_value(actual, op, expected):
                 return False, f"Assertion failed: {path} {op} {expected}, actual={actual}"
             return True, ""
@@ -46,3 +53,25 @@ class AssertionEngine:
                 return False, f"Unsupported JSONPath operator: {op}"
         else:
             return False, f"Unknown assertion type: {atype}"
+
+
+if __name__ == '__main__':
+    actual_value = {
+        "data": {
+            "user": {
+                "id": 10001,
+                "name": "Alice"
+            }
+        }
+    }
+
+    context = Context({"uid": 10001})
+    assertion1 = {
+        "type": "path",
+        "path": "data.user.id",
+        "operator": "eq",
+        "value": "${uid}"
+    }
+
+    ok, msg = AssertionEngine.assert_one(assertion1, actual_value, context)
+    print(ok, msg)
