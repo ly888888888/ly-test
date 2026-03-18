@@ -268,7 +268,7 @@ curl http://172.17.7.156:5000/api/run/results/<run_id>
 ```
 
 
-# New APIs (added)
+# 新增加api
 ## Interfaces CRUD
 ```text
 curl http://172.17.7.156:5000/api/interfaces?project=jupiter&path=/config/homepage/v4&method=GET
