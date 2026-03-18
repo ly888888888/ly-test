@@ -144,6 +144,13 @@ def ensure_default_admin(username, password, permissions=None):
     """
     user = User.query.filter_by(username=username).first()
     if user:
+        # ensure superadmin permission exists for default admin
+        perms = permissions or ['superadmin']
+        existing = {p.permission for p in user.permissions}
+        for p in perms:
+            if p not in existing:
+                db.session.add(UserPermission(user_id=user.id, permission=p))
+        db.session.commit()
         return user
     user = User(
         username=username,
@@ -152,7 +159,7 @@ def ensure_default_admin(username, password, permissions=None):
     )
     db.session.add(user)
     db.session.flush()
-    perms = permissions or ['admin']
+    perms = permissions or ['superadmin']
     for p in perms:
         db.session.add(UserPermission(user_id=user.id, permission=p))
     db.session.commit()

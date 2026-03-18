@@ -30,7 +30,7 @@ def create_app():
         ensure_default_admin(
             app.config.get('ADMIN_USER', 'admin'),
             app.config.get('ADMIN_PASSWORD', 'admin123'),
-            permissions=['admin']
+            permissions=['superadmin']
         )
         app.config['_DEFAULT_ADMIN_INITED'] = True
 
@@ -43,6 +43,6 @@ if __name__ == '__main__':
         ensure_default_admin(
             app.config.get('ADMIN_USER', 'admin'),
             app.config.get('ADMIN_PASSWORD', 'admin123'),
-            permissions=['admin']
+            permissions=['superadmin']
         )
     app.run(debug=True, host='0.0.0.0', port=5000)

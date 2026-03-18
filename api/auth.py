@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import Blueprint, request, jsonify, current_app, g
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 from models import db, User, UserToken, UserPermission
 
 auth_bp = Blueprint('auth', __name__)
@@ -38,7 +38,7 @@ def require_permissions(*perms, allow_anonymous=False):
             if not user or not user.is_active:
                 return jsonify({'error': 'user disabled'}), 403
             user_perms = _get_user_permissions(user.id)
-            if 'admin' in user_perms:
+            if 'superadmin' in user_perms:
                 g.current_user = user
                 return fn(*args, **kwargs)
             if perms and not set(perms).issubset(user_perms):
@@ -74,6 +74,46 @@ def login():
         'user_id': user.id,
         'permissions': perms
     })
+
+
+@auth_bp.route('/register', methods=['POST'])
+def register():
+    data = request.get_json() or {}
+    username = data.get('username')
+    password = data.get('password')
+    if not username or not password:
+        return jsonify({'error': 'username/password required'}), 400
+    if User.query.filter_by(username=username).first():
+        return jsonify({'error': 'username exists'}), 409
+    user = User(
+        username=username,
+        password_hash=generate_password_hash(password),
+        is_active=True
+    )
+    db.session.add(user)
+    db.session.flush()
+    # default read-only permissions for new registrations
+    default_perms = [
+        'interface:read',
+        'testcase:read',
+        'flow:read',
+        'function:read',
+        'run:read'
+    ]
+    for p in default_perms:
+        db.session.add(UserPermission(user_id=user.id, permission=p))
+    token = uuid.uuid4().hex
+    expires_at = datetime.utcnow() + timedelta(hours=current_app.config.get('TOKEN_EXPIRES_HOURS', 24))
+    token_rec = UserToken(user_id=user.id, token=token, expires_at=expires_at)
+    user.last_login_at = datetime.utcnow()
+    db.session.add(token_rec)
+    db.session.commit()
+    return jsonify({
+        'token': token,
+        'expires_at': expires_at.isoformat() + 'Z',
+        'user_id': user.id,
+        'permissions': sorted(default_perms)
+    }), 201
 
 
 @auth_bp.route('/logout', methods=['POST'])

@@ -13,7 +13,7 @@ def _set_permissions(user_id, perms):
 
 
 @users_bp.route('/users', methods=['GET'])
-@require_permissions('admin')
+@require_permissions('superadmin')
 def list_users():
     users = User.query.all()
     return jsonify([{
@@ -27,7 +27,7 @@ def list_users():
 
 
 @users_bp.route('/users', methods=['POST'])
-@require_permissions('admin')
+@require_permissions('superadmin')
 def create_user():
     data = request.get_json() or {}
     username = data.get('username')
@@ -49,7 +49,7 @@ def create_user():
 
 
 @users_bp.route('/users/<int:user_id>', methods=['GET'])
-@require_permissions('admin')
+@require_permissions('superadmin')
 def get_user(user_id):
     user = User.query.get_or_404(user_id)
     return jsonify({
@@ -63,7 +63,7 @@ def get_user(user_id):
 
 
 @users_bp.route('/users/<int:user_id>', methods=['PUT'])
-@require_permissions('admin')
+@require_permissions('superadmin')
 def update_user(user_id):
     user = User.query.get_or_404(user_id)
     data = request.get_json() or {}
@@ -78,7 +78,7 @@ def update_user(user_id):
 
 
 @users_bp.route('/users/<int:user_id>', methods=['DELETE'])
-@require_permissions('admin')
+@require_permissions('superadmin')
 def delete_user(user_id):
     user = User.query.get_or_404(user_id)
     db.session.delete(user)
