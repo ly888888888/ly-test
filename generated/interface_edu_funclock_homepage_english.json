@@ -1,0 +1,26 @@
+{
+  "project": "edubox",
+  "path": "/edu/funclock/homepage/english",
+  "method": "GET",
+  "schema": {
+    "$schema": "http://json-schema.org/schema#",
+    "type": "object",
+    "properties": {
+      "retCode": {
+        "type": "string"
+      },
+      "retMsg": {
+        "type": "string"
+      },
+      "data": {
+        "type": "array"
+      }
+    },
+    "required": [
+      "data",
+      "retCode",
+      "retMsg"
+    ]
+  },
+  "description": "自动创建接口: /edu/funclock/homepage/english"
+}

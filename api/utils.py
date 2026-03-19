@@ -1,6 +1,9 @@
+﻿import json
 from dsl.context import Context
 from tools.conf import TestDB  # 复用原有数据库连接
 from api import custom_functions
+from models import ParamTemplate
+
 
 def resolve_params(params_def):
     """
@@ -16,6 +19,51 @@ def resolve_params(params_def):
         typ = def_item.get('type')
         if typ == 'fixed':
             resolved[key] = def_item['value']
+        elif typ == 'template':
+            tmpl_name = def_item.get('name')
+            tmpl_id = def_item.get('template_id')
+            tmpl = None
+            if tmpl_name:
+                tmpl = ParamTemplate.query.filter_by(name=tmpl_name).first()
+            elif tmpl_id:
+                tmpl = ParamTemplate.query.get(tmpl_id)
+            if tmpl is None:
+                raise ValueError(f"Template not found for {key}")
+            if tmpl.type == 'fixed':
+                try:
+                    resolved[key] = json.loads(tmpl.value)
+                except Exception:
+                    resolved[key] = tmpl.value
+            elif tmpl.type == 'db_query':
+                sql = tmpl.value
+                conn = TestDB.get_connection()
+                try:
+                    with conn.cursor() as cursor:
+                        cursor.execute(sql)
+                        result = cursor.fetchone()
+                        resolved[key] = result[0] if result else None
+                finally:
+                    conn.close()
+            elif tmpl.type == 'function':
+                func_name = None
+                args = {}
+                try:
+                    payload = json.loads(tmpl.value)
+                    if isinstance(payload, dict):
+                        func_name = payload.get('function')
+                        args = payload.get('args', {})
+                except Exception:
+                    func_name = tmpl.value
+                if not func_name:
+                    raise ValueError("Function name required in template")
+                func = getattr(custom_functions, func_name, None)
+                if func is None:
+                    raise ValueError(f"Function {func_name} not found")
+                resolved[key] = func(**args)
+            elif tmpl.type == 'random':
+                resolved[key] = tmpl.value if tmpl.value is not None else 'random_value'
+            else:
+                raise ValueError(f'Unknown template type: {tmpl.type}')
         elif typ == 'db_query':
             sql = def_item['sql']
             # 执行查询，仅取第一条记录第一列
@@ -40,6 +88,7 @@ def resolve_params(params_def):
         else:
             raise ValueError(f'Unknown param type: {typ}')
     return resolved
+
 
 def get_value_by_path(obj, path):
     """
@@ -86,6 +135,7 @@ def get_value_by_path(obj, path):
 
     return current
 
+
 def resolve_variables(value, context):
     """递归解析值中的变量引用"""
     if isinstance(value, str):
@@ -96,6 +146,7 @@ def resolve_variables(value, context):
         return [resolve_variables(item, context) for item in value]
     else:
         return value
+
 
 def compare_value(actual, operator, expected):
     if operator == "eq":
@@ -115,39 +166,9 @@ def compare_value(actual, operator, expected):
     # 可根据需要扩展
     return False
 
+
 if __name__ == '__main__':
-    # print(resolve_params({
-    #   "isencode": {"type": "fixed", "value": 1},
-    #   "auto": {"type": "fixed", "value": "single"},
-    #   "brand": {"type": "fixed", "value": "funshion"},
-    #   "_assertions": [
-    #     {"type": "path", "path": "data.config.desktop", "operator": "eq", "value": 1704}
-    #   ]
-    # }))
-    # print(resolve_params({
-    #   "isencode": {"type": "fixed", "value": 1},
-    #   "auto": {"type": "fixed", "value": "single"},
-    #   "brand": {"type": "fixed", "value": "funshion"},
-    #   "version": {"type": "function", "function": "randomVer", "args": {}},
-    #   "_assertions": [
-    #     {
-    #       "type": "function",
-    #       "function": "check_tabs",
-    #       "args": {"brand": "funshion", "version": {"$ref": "version"}}  # 注意：这里需要引用 version 的值
-    #     }
-    #   ]
-    # }))
-
-    # response = {
-    #     "data": {
-    #         "items": [
-    #             {"name": "apple", "price": 10},
-    #             {"name": "banana", "price": 20}
-    #         ]
-    #     }
-    # }
-    # print(get_value_by_path(response, "data.items[0].name"))
-
+    # 示例保留
     context = Context({
         "variables": {
             "token": "abc123",

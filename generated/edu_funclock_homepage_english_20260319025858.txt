@@ -1,0 +1,4 @@
+
+curl -s -w \"\nHTTP_STATUS:%{http_code}\n\" -X POST http://172.17.7.156:5000/api/testcases ^
+-H \"Content-Type: application/json\" ^
+-d @testcase_edu_funclock_homepage_english_smoke.json

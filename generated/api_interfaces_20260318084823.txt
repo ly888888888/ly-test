@@ -1,0 +1,13 @@
+
+curl -s -w \"\nHTTP_STATUS:%{http_code}\n\" -X POST http://172.17.7.156:5000/api/testcases ^
+-H \"Content-Type: application/json\" ^
+-d @testcase_api_interfaces_logic.json
+
+
+# 创建测试流程
+curl -s -w \"\nHTTP_STATUS:%{http_code}\n\" -X POST http://172.17.7.156:5000/api/flows ^
+-H \"Content-Type: application/json\" ^
+-d @flow_flow_api_interfaces.json
+
+
+说明: flow steps 中 api_id 使用占位符 {接口ID_stepN}，请替换为对应接口定义ID

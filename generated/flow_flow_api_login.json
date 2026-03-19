@@ -1,0 +1,107 @@
+{
+  "name": "flow_api_login",
+  "steps": [
+    {
+      "type": "step",
+      "name": "step1",
+      "api_id": "{接口ID_step1}",
+      "params": {
+        "assertions": [
+          {
+            "type": "path",
+            "path": "retCode",
+            "operator": "eq",
+            "value": 200
+          }
+        ]
+      },
+      "assertions": [
+        {
+          "type": "path",
+          "path": "retCode",
+          "operator": "eq",
+          "value": 200
+        }
+      ]
+    },
+    {
+      "type": "condition",
+      "if": "${steps.step1.is_vip} == True",
+      "then": [
+        {
+          "type": "step",
+          "name": "step1",
+          "api_id": "{接口ID_step1}",
+          "params": {
+            "assertions": [
+              {
+                "type": "path",
+                "path": "retCode",
+                "operator": "eq",
+                "value": 200
+              }
+            ]
+          },
+          "assertions": [
+            {
+              "type": "path",
+              "path": "retCode",
+              "operator": "eq",
+              "value": 200
+            }
+          ]
+        }
+      ],
+      "else": [
+        {
+          "type": "step",
+          "name": "step1",
+          "api_id": "{接口ID_step1}",
+          "params": {
+            "assertions": [
+              {
+                "type": "path",
+                "path": "data",
+                "operator": "ne",
+                "value": "null"
+              },
+              {
+                "type": "path",
+                "path": "retMsg",
+                "operator": "eq",
+                "value": "ok"
+              },
+              {
+                "type": "path",
+                "path": "retCode",
+                "operator": "eq",
+                "value": 200
+              }
+            ]
+          },
+          "assertions": [
+            {
+              "type": "path",
+              "path": "data",
+              "operator": "ne",
+              "value": "null"
+            },
+            {
+              "type": "path",
+              "path": "retMsg",
+              "operator": "eq",
+              "value": "ok"
+            },
+            {
+              "type": "path",
+              "path": "retCode",
+              "operator": "eq",
+              "value": 200
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "enabled": true
+}

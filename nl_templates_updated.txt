@@ -1,0 +1,267 @@
+﻿【自然语言录入模板（规范版）】
+
+【输入规范】
+1. 界面自然语言输入不需要写 /add-interface-curl-py 前缀。
+2. 非流程场景必须包含“接口请求返回结果/响应”的 JSON。
+3. 流程场景每个步骤都必须写“请求/响应”的 JSON。
+4. 条件分支必须写 IF/THEN/ELSE，且 IF 行不写“2) IF 条件”。
+5. 流程默认只生成 flow，不生成用例。如需生成用例，请明确写“需要生成xxx测试”。
+6. 流程步骤断言支持三种写法：
+   a) 写在对应步骤“请求 JSON.assertions”里；
+   b) 用自然语言“步骤N断言 …”（不区分类型）；
+   c) 用自然语言“步骤N + 测试类型 + 断言”。支持 smoke/structural/logic/compare/monitor。
+
+A. 创建接口 + 全量用例（默认五种）
+我现在有个新接口, GET请求, edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1&version=randomVer(),
+接口请求返回结果:{"retCode":"200","retMsg":"ok","data":[]}
+
+B. 创建接口 + 指定用例（smoke/structural/logic/monitor/compare）
+我现在有个新接口, GET请求, edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1&version=randomVer(),
+接口请求返回结果:{"retCode":"200","retMsg":"ok","data":[]}
+需要生成smoke、structural、逻辑、监控、对比测试
+
+C. 只生成接口定义（不生成测试用例）
+我现在有个新接口, GET请求, edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1&version=randomVer(),
+接口请求返回结果:{"retCode":"200","retMsg":"ok","data":[]}
+只创建接口
+
+D. 非新接口（仅生成测试用例）
+我现在有个接口, GET请求, edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1&version=randomVer(),
+接口请求返回结果:{"retCode":"200","retMsg":"ok","data":[]}
+需要生成smoke、structural、逻辑、监控、对比测试
+
+E. 指定断言（每种用例独立断言）
+我现在有个新接口, GET请求, edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1,
+接口请求返回结果:{"retCode":"200","retMsg":"ok","data":[{"action_template":"sync_lesson","name":"同步课文"}]}
+需要生成smoke、structural、逻辑、监控、对比测试
+smoke断言，data[0].action_template == sync_lesson
+structural断言，retCode == 200
+logic断言，data[0].name == 同步课文
+monitor断言，data[0].action_template != ""
+compare断言，retMsg == ok
+
+F. 多逻辑用例
+我现在有个新接口, GET请求, edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1,
+接口请求返回结果:{"retCode":"200","retMsg":"ok","data":[{"action_template":"sync_lesson","name":"同步课文"}]}
+需要生成逻辑测试
+第一个逻辑用例断言是 data[0].action_template == sync_lesson
+第二个逻辑用例断言是 data[0].name == 同步课文
+第三个逻辑用例断言是 data[0].action_template != ""
+
+G. 复杂参数类型（fixed/function/function_with_args/db_query）
+我现在有个新接口, GET请求, edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1&strategy_ids=getFoStrategy(num=20)&media_id="SELECT media_id FROM db_jupiter_media.fm_media WHERE disable=0 ORDER BY RAND() LIMIT 1"&version=randomVer(),
+接口请求返回结果:{"retCode":"200","retMsg":"ok","data":[]}
+需要生成smoke测试
+smoke断言，retCode == 200
+
+H. 多步流程（基础，不生成用例）
+测试流程如下：
+1) POST /api/interfaces
+请求: {"project":"demo","path":"/user/profile","method":"POST","schema":{"type":"object"}}
+响应: {"id": 12}
+
+2) POST /api/testcases
+请求: {"project":"demo","name":"get_profile_logic","api_id":12,"test_type":"logic","params":{"uid":{"type":"fixed","value":10001}}}
+响应: {"id": 100}
+
+3) POST /api/run/testcase/100
+请求: {"host":"127.0.0.1:5000"}
+响应: {"run_id":"r-001"}
+
+4) GET /api/run/results/r-001
+请求: {}
+响应: [{"case_id":100,"status":"success"}]
+
+I. 多步流程（带 params/assertions/extract + 参数传递，不生成用例）
+测试流程如下：
+1) POST /api/testcases
+请求: {
+  "project":"demo",
+  "name":"get_profile_logic",
+  "api_id":12,
+  "test_type":"logic",
+  "params":{
+    "uid":{"type":"fixed","value":10001},
+    "version":{"type":"function","function":"randomVer","args":{}},
+    "strategy_id":{"type":"function","function":"getFoStrategy","args":{"num":2}},
+    "scene":{"type":"db_query","sql":"SELECT scene FROM config_scene LIMIT 1"}
+  },
+  "assertions":[
+    {"type":"path","path":"data.user.id","operator":"eq","value":"${uid}"},
+    {"type":"function","function":"check_tabs","args":{"brand":"funshion","version":"${version}"}},
+    {"type":"jsonpath","jsonpath":"$.data.tabs[*].name","operator":"contains","value":"首页"}
+  ],
+  "extract":{"token":"$.data.token","user_id":"$.data.user.id"}
+}
+响应: {"id": 100}
+
+2) POST /api/run/testcase/100
+请求: {"host":"127.0.0.1:5000", "token":"${steps.step1.token}", "uid":"${steps.step1.user_id}"}
+响应: {"run_id":"r-001"}
+
+3) GET /api/run/results/r-001
+请求: {}
+响应: [{"case_id":100,"status":"success"}]
+
+J. 多步流程 + 数据驱动（data_source，不生成用例）
+测试流程如下（带数据驱动）：
+数据源: [{"user":"alice","password":"p1"},{"user":"bob","password":"p2"}]
+1) POST /api/login
+请求: {"params":{"user":"${data.user}","password":"${data.password}"},"extract":{"token":"$.data.token"}}
+响应: {"token":"t-001"}
+2) GET /api/profile
+请求: {"params":{"token":"${steps.step1.token}"}}
+响应: {"status":200}
+
+K. compare/monitor 特殊说明
+我现在有个新接口, GET请求, edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1,
+接口请求返回结果:{"retCode":"200","retMsg":"ok","data":[]}
+需要生成compare、monitor测试
+compare断言，retCode == 200
+monitor断言，data != null
+
+【补充模板：1-6】
+
+1) 结构测试 Schema 手工补充
+我现在有个新接口, GET请求, edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1,
+接口请求返回结果:{"retCode":"200","retMsg":"ok","data":[{"id":1,"name":"A"}]}
+需要生成structural测试
+结构断言，retCode == 200
+说明：如生成的 Schema 不够精准，可手工修改 interface_xxx.json 中 schema 字段
+
+2) compare 多环境 host_compare 示例
+我现在有个新接口, GET请求, edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1,
+接口请求返回结果:{"retCode":"200","retMsg":"ok","data":[]}
+需要生成compare测试
+compare断言，retCode == 200
+说明：执行 compare 用例时传 host_compare
+POST /api/run/testcase/{用例ID}
+{"host":"old.xxx.com","host_compare":"new.xxx.com"}
+
+3) monitor 定时/阈值场景
+我现在有个接口, GET请求, edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1,
+接口请求返回结果:{"retCode":"200","retMsg":"ok","data":[]}
+需要生成monitor测试
+monitor断言，data[0].action_template != ""
+说明：调度层可按分钟/小时定时调用 /api/run/suite
+
+4) 多接口批量生成（同项目多接口）
+我现在有多个新接口：
+接口1: GET /edu/funclock/homepage/english?isencode=1 返回:{"retCode":"200","retMsg":"ok","data":[]}
+接口2: GET /edu/funclock/homepage/math?isencode=1 返回:{"retCode":"200","retMsg":"ok","data":[]}
+接口3: GET /edu/funclock/homepage/chinese?isencode=1 返回:{"retCode":"200","retMsg":"ok","data":[]}
+需要生成smoke、structural测试
+说明：逐条复制描述执行，或拆成多段分别调用
+
+5) 复杂断言（多条件）
+我现在有个新接口, GET请求, edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1,
+接口请求返回结果:{"retCode":"200","retMsg":"ok","data":[{"action_template":"sync_lesson","name":"同步课文"}]}
+需要生成logic测试
+逻辑断言是 data[0].action_template == sync_lesson；data[0].name != ""；retCode == 200
+说明：同一用例支持多条断言，用；/、分隔
+
+6) 失败用例（预期非200）
+我现在有个新接口, GET请求, edubox项目,
+请求路由和参数:/edu/funclock/homepage/english?isencode=1,
+接口请求返回结果:{"retCode":"200","retMsg":"ok","data":[]}
+需要生成smoke测试
+smoke断言，retCode != 200
+说明：如需期望状态码非200，可在生成后的 testcases JSON 中手工修改 expected_status
+
+【补充模板：流程分支（条件分支 then/else）】
+
+7) 条件分支（脚本可自动生成流程）
+测试流程如下（含条件分支）：
+1) POST /api/login
+请求: {"params":{"user":"alice","password":"p1"},"extract":{"token":"$.data.token","is_vip":"$.data.vip"}}
+响应: {"token":"t-001","vip":true}
+
+IF 条件: ${steps.step1.is_vip} == True
+THEN:
+2.1) GET /api/vip/reco
+请求: {"params":{"token":"${steps.step1.token}"}}
+响应: {"data":[]}
+ELSE:
+2.2) GET /api/free/reco
+请求: {"params":{"token":"${steps.step1.token}"}}
+响应: {"data":[]}
+
+说明：条件分支必须写成 IF/THEN/ELSE 结构，且不加“2) IF 条件”。
+
+8) 条件分支 + 指定步骤断言（在步骤请求里写 assertions）
+测试流程如下（含条件分支 + 步骤断言）：
+1) POST /api/login
+请求: {"params":{"user":"alice","password":"p1"},"extract":{"token":"$.data.token","is_vip":"$.data.vip"}}
+响应: {"token":"t-001","vip":true}
+
+IF 条件: ${steps.step1.is_vip} == True
+THEN:
+2.1) GET /api/vip/reco
+请求: {"params":{"token":"${steps.step1.token}"},"assertions":[{"type":"path","path":"retCode","operator":"eq","value":200}]}
+响应: {"retCode":200,"data":[]}
+ELSE:
+2.2) GET /api/free/reco
+请求: {"params":{"token":"${steps.step1.token}"},"assertions":[{"type":"path","path":"retCode","operator":"eq","value":200}]}
+响应: {"retCode":200,"data":[]}
+
+说明：流程步骤级断言需要放在对应步骤的“请求 JSON.assertions”中。
+
+9) 条件分支 + 步骤N断言（自然语言映射，不区分类型）
+测试流程如下（含条件分支 + 步骤断言）：
+1) POST /api/login
+请求: {"params":{"user":"alice","password":"p1"},"extract":{"token":"$.data.token","is_vip":"$.data.vip"}}
+响应: {"retCode":200,"token":"t-001","vip":true}
+
+IF 条件: ${steps.step1.is_vip} == True
+THEN:
+2.1) GET /api/vip/reco
+请求: {"params":{"token":"${steps.step1.token}"}}
+响应: {"retCode":200,"data":[]}
+ELSE:
+2.2) GET /api/free/reco
+请求: {"params":{"token":"${steps.step1.token}"}}
+响应: {"retCode":200,"data":[]}
+
+步骤1断言是 retCode == 200
+步骤2.1断言是 retCode == 200
+步骤2.2断言是 data != null
+步骤2.2断言是 retMsg == ok
+步骤2.2断言是 retCode == 200
+
+说明：步骤编号需与步骤序号一致（1 / 2.1 / 2.2）。
+
+10) 条件分支 + 步骤N断言（自然语言映射，支持所有类型）
+测试流程如下（含条件分支 + 步骤断言）：
+1) POST /api/login
+请求: {"params":{"user":"alice","password":"p1"},"extract":{"token":"$.data.token","is_vip":"$.data.vip"}}
+响应: {"retCode":200,"token":"t-001","vip":true}
+
+IF 条件: ${steps.step1.is_vip} == True
+THEN:
+2.1) GET /api/vip/reco
+请求: {"params":{"token":"${steps.step1.token}"}}
+响应: {"retCode":200,"data":[]}
+ELSE:
+2.2) GET /api/free/reco
+请求: {"params":{"token":"${steps.step1.token}"}}
+响应: {"retCode":200,"data":[]}
+
+步骤1断言是 retCode == 200
+步骤2.1断言是 retCode == 200
+步骤2.2断言是 data != null
+步骤2.2断言是 retMsg == ok
+步骤2.2断言是 retCode == 200
+
+说明：步骤编号需与步骤序号一致（1 / 2.1 / 2.2）。

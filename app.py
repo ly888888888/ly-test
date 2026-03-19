@@ -8,6 +8,8 @@ from api.functions import functions_bp
 from api.flows import flows_bp
 from api.auth import auth_bp
 from api.users import users_bp
+from api.nl_generate import nl_bp
+from api.param_templates import param_templates_bp
 
 def create_app():
     app = Flask(__name__)
@@ -22,6 +24,8 @@ def create_app():
     app.register_blueprint(flows_bp, url_prefix='/api/flows')
     app.register_blueprint(auth_bp, url_prefix='/api')
     app.register_blueprint(users_bp, url_prefix='/api')
+    app.register_blueprint(nl_bp, url_prefix='/api')
+    app.register_blueprint(param_templates_bp, url_prefix='/api/param-templates')
 
     @app.before_request
     def _init_default_admin_once():

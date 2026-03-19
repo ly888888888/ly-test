@@ -1,0 +1,8 @@
+{
+  "project": "edubox",
+  "name": "/api/login 逻辑测试",
+  "api_id": 0,
+  "test_type": "logic",
+  "params": {},
+  "enabled": true
+}

@@ -1,4 +1,6 @@
 import uuid
+import random
+import string
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import Blueprint, request, jsonify, current_app, g
@@ -6,6 +8,21 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from models import db, User, UserToken, UserPermission
 
 auth_bp = Blueprint('auth', __name__)
+
+_CAPTCHA_TTL_SECONDS = 60
+_captcha_store = {}
+
+
+def _cleanup_captcha():
+    now = datetime.utcnow()
+    expired = [k for k, v in _captcha_store.items() if v['expires_at'] <= now]
+    for k in expired:
+        _captcha_store.pop(k, None)
+
+
+def _gen_captcha_code(length=4):
+    chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+    return ''.join(random.choice(chars) for _ in range(length))
 
 
 def _get_token():
@@ -54,8 +71,19 @@ def login():
     data = request.get_json() or {}
     username = data.get('username')
     password = data.get('password')
+    captcha_id = data.get('captcha_id')
+    captcha = data.get('captcha')
     if not username or not password:
         return jsonify({'error': 'username/password required'}), 400
+    if not captcha_id or not captcha:
+        return jsonify({'error': 'captcha required'}), 400
+    _cleanup_captcha()
+    captcha_rec = _captcha_store.get(captcha_id)
+    if not captcha_rec:
+        return jsonify({'error': 'captcha expired'}), 400
+    if captcha_rec['code'].lower() != str(captcha).lower():
+        return jsonify({'error': 'captcha invalid'}), 400
+    _captcha_store.pop(captcha_id, None)
     user = User.query.filter_by(username=username).first()
     if not user or not check_password_hash(user.password_hash, password):
         return jsonify({'error': 'invalid credentials'}), 401
@@ -98,7 +126,8 @@ def register():
         'testcase:read',
         'flow:read',
         'function:read',
-        'run:read'
+        'run:read',
+        'param:read'
     ]
     for p in default_perms:
         db.session.add(UserPermission(user_id=user.id, permission=p))
@@ -126,3 +155,20 @@ def logout():
     token_rec.revoked = True
     db.session.commit()
     return jsonify({'message': 'logged out'})
+
+
+@auth_bp.route('/captcha', methods=['GET'])
+def captcha():
+    _cleanup_captcha()
+    code = _gen_captcha_code()
+    captcha_id = uuid.uuid4().hex
+    expires_at = datetime.utcnow() + timedelta(seconds=_CAPTCHA_TTL_SECONDS)
+    _captcha_store[captcha_id] = {
+        'code': code,
+        'expires_at': expires_at
+    }
+    return jsonify({
+        'captcha_id': captcha_id,
+        'code': code,
+        'expires_in': _CAPTCHA_TTL_SECONDS
+    })

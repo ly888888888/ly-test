@@ -1,0 +1,24 @@
+
+curl -s -w \"\nHTTP_STATUS:%{http_code}\n\" -X POST http://172.17.7.156:5000/api/testcases ^
+-H \"Content-Type: application/json\" ^
+-d @testcase_api_login_smoke.json
+
+
+curl -s -w \"\nHTTP_STATUS:%{http_code}\n\" -X POST http://172.17.7.156:5000/api/testcases ^
+-H \"Content-Type: application/json\" ^
+-d @testcase_api_login_structural.json
+
+
+curl -s -w \"\nHTTP_STATUS:%{http_code}\n\" -X POST http://172.17.7.156:5000/api/testcases ^
+-H \"Content-Type: application/json\" ^
+-d @testcase_api_login_logic.json
+
+
+curl -s -w \"\nHTTP_STATUS:%{http_code}\n\" -X POST http://172.17.7.156:5000/api/testcases ^
+-H \"Content-Type: application/json\" ^
+-d @testcase_api_login_compare.json
+
+
+curl -s -w \"\nHTTP_STATUS:%{http_code}\n\" -X POST http://172.17.7.156:5000/api/testcases ^
+-H \"Content-Type: application/json\" ^
+-d @testcase_api_login_monitor.json

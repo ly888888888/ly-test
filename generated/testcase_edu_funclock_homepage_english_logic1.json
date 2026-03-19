@@ -1,0 +1,21 @@
+{
+  "project": "edubox",
+  "name": "/edu/funclock/homepage/english 逻辑测试1",
+  "api_id": 0,
+  "test_type": "logic",
+  "params": {
+    "isencode": {
+      "type": "fixed",
+      "value": "1,"
+    }
+  },
+  "enabled": true,
+  "assertions": [
+    {
+      "type": "path",
+      "path": "data[0].action_template",
+      "operator": "eq",
+      "value": "sync_lesson"
+    }
+  ]
+}

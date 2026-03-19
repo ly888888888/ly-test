@@ -1,0 +1,30 @@
+{
+  "name": "flow_api_interfaces",
+  "steps": [
+    {
+      "type": "step",
+      "name": "step1",
+      "api_id": "{接口ID_step1}",
+      "params": {}
+    },
+    {
+      "type": "step",
+      "name": "step2",
+      "api_id": "{接口ID_step2}",
+      "params": {}
+    },
+    {
+      "type": "step",
+      "name": "step3",
+      "api_id": "{接口ID_step3}",
+      "params": {}
+    },
+    {
+      "type": "step",
+      "name": "step4",
+      "api_id": "{接口ID_step4}",
+      "params": {}
+    }
+  ],
+  "enabled": true
+}

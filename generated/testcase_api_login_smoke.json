@@ -1,0 +1,9 @@
+{
+  "project": "edubox",
+  "name": "/api/login 冒烟测试",
+  "api_id": 0,
+  "test_type": "smoke",
+  "params": {},
+  "enabled": true,
+  "expected_status": 200
+}

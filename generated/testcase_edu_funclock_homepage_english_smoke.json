@@ -1,0 +1,22 @@
+{
+  "project": "edubox",
+  "name": "/edu/funclock/homepage/english 冒烟测试",
+  "api_id": 0,
+  "test_type": "smoke",
+  "params": {
+    "isencode": {
+      "type": "fixed",
+      "value": "1,"
+    }
+  },
+  "enabled": true,
+  "assertions": [
+    {
+      "type": "path",
+      "path": "retCode",
+      "operator": "ne",
+      "value": 200
+    }
+  ],
+  "expected_status": 200
+}
