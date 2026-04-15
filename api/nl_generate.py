@@ -179,11 +179,12 @@ curl -s -w \\\"\\nHTTP_STATUS:%{{http_code}}\\n\\\" -X POST {base_url}/api/inter
 """
 
 
-def generate_testcase_payload(project, test_type, name_suffix, params, api_id_placeholder=0, assertions=None, expected_status=None):
+# 增加 api_id 参数，不再使用占位符 0
+def generate_testcase_payload(project, test_type, name_suffix, params, api_id, assertions=None, expected_status=None):
     payload = {
         "project": project,
         "name": name_suffix,
-        "api_id": api_id_placeholder,
+        "api_id": api_id,
         "test_type": test_type,
         "params": params,
         "enabled": True
@@ -608,6 +609,18 @@ def generate():
         if not interface_exists(project, main_path, method):
             return jsonify({'error': f'接口不存在: {project} {method} {main_path}', 'expected': _expected_example()}), 400
 
+    # --- 查询真实接口 ID ---
+    real_api_id = 0
+    if not has_flow and requested_tests:
+        main_path = _normalize_path(path)
+        api_def = ApiDefinition.query.filter_by(project=project, path=main_path, method=method).first()
+        if api_def:
+            real_api_id = api_def.id
+        else:
+            # 理论上前面已校验存在，这里作为 fallback
+            print(f"Warning: 未找到接口 {project} {method} {main_path}，使用 api_id=0")
+    # ----------------------------
+
     out_dir = os.path.join(os.getcwd(), 'generated')
     os.makedirs(out_dir, exist_ok=True)
 
@@ -626,33 +639,33 @@ def generate():
     if requested_tests:
         if 'smoke' in requested_tests:
             smoke_assertions = extract_assertions(text, 'smoke')
-            payload = generate_testcase_payload(project, 'smoke', f"{path} 冒烟测试", base_params, assertions=smoke_assertions or None, expected_status=200)
+            payload = generate_testcase_payload(project, 'smoke', f"{path} 冒烟测试", base_params, real_api_id, assertions=smoke_assertions or None, expected_status=200)
             testcases.append(payload)
             curl_parts.append(generate_testcase_curl(base_url, payload, safe_path, 'smoke', out_dir))
         if 'structural' in requested_tests:
             structural_assertions = extract_assertions(text, 'structural')
-            payload = generate_testcase_payload(project, 'structural', f"{path} 结构测试", base_params, assertions=structural_assertions or None)
+            payload = generate_testcase_payload(project, 'structural', f"{path} 结构测试", base_params, real_api_id, assertions=structural_assertions or None)
             testcases.append(payload)
             curl_parts.append(generate_testcase_curl(base_url, payload, safe_path, 'structural', out_dir))
         if 'logic' in requested_tests:
             logic_cases = extract_assertions(text, 'logic')
             if logic_cases and isinstance(logic_cases, list) and logic_cases and isinstance(logic_cases[0], list):
                 for idx, assertions in enumerate(logic_cases, start=1):
-                    payload = generate_testcase_payload(project, 'logic', f"{path} 逻辑测试{idx}", base_params, assertions=assertions)
+                    payload = generate_testcase_payload(project, 'logic', f"{path} 逻辑测试{idx}", base_params, real_api_id, assertions=assertions)
                     testcases.append(payload)
                     curl_parts.append(generate_testcase_curl(base_url, payload, safe_path, f'logic{idx}', out_dir))
             else:
-                payload = generate_testcase_payload(project, 'logic', f"{path} 逻辑测试", base_params)
+                payload = generate_testcase_payload(project, 'logic', f"{path} 逻辑测试", base_params, real_api_id)
                 testcases.append(payload)
                 curl_parts.append(generate_testcase_curl(base_url, payload, safe_path, 'logic', out_dir))
         if 'compare' in requested_tests:
             compare_assertions = extract_assertions(text, 'compare')
-            payload = generate_testcase_payload(project, 'compare', f"{path} 对比测试", base_params, assertions=compare_assertions or None)
+            payload = generate_testcase_payload(project, 'compare', f"{path} 对比测试", base_params, real_api_id, assertions=compare_assertions or None)
             testcases.append(payload)
             curl_parts.append(generate_testcase_curl(base_url, payload, safe_path, 'compare', out_dir))
         if 'monitor' in requested_tests:
             monitor_assertions = extract_assertions(text, 'monitor')
-            payload = generate_testcase_payload(project, 'monitor', f"{path} 监控测试", base_params, assertions=monitor_assertions or None)
+            payload = generate_testcase_payload(project, 'monitor', f"{path} 监控测试", base_params, real_api_id, assertions=monitor_assertions or None)
             testcases.append(payload)
             curl_parts.append(generate_testcase_curl(base_url, payload, safe_path, 'monitor', out_dir))
 

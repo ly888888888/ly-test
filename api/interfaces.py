@@ -34,6 +34,16 @@ def create_interface():
     required = ['project', 'path', 'method', 'schema']
     if not all(k in data for k in required):
         return jsonify({'error': 'Missing fields'}), 400
+
+    # 检查是否已存在相同的 project、path、method 组合
+    existing = ApiDefinition.query.filter_by(
+        project=data['project'],
+        path=data['path'],
+        method=data['method']
+    ).first()
+    if existing:
+        return jsonify({'error': '接口已存在（相同项目、路径和方法）'}), 400
+
     interface = ApiDefinition(
         project=data['project'],
         path=data['path'],

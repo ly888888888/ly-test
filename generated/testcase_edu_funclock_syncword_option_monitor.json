@@ -1,0 +1,8 @@
+{
+  "project": "edubox",
+  "name": "/edu/funclock/syncword/option 监控测试",
+  "api_id": 3,
+  "test_type": "monitor",
+  "params": {},
+  "enabled": true
+}

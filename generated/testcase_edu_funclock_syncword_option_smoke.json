@@ -1,0 +1,9 @@
+{
+  "project": "edubox",
+  "name": "/edu/funclock/syncword/option 冒烟测试",
+  "api_id": 3,
+  "test_type": "smoke",
+  "params": {},
+  "enabled": true,
+  "expected_status": 200
+}
