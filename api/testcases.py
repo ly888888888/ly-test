@@ -7,30 +7,44 @@ testcases_bp = Blueprint('testcases', __name__)
 @testcases_bp.route('', methods=['GET'])
 @require_permissions('testcase:read', allow_anonymous=True)
 def list_testcases():
+    # 分页参数
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 20, type=int)
+    # 过滤参数
+    name = request.args.get('name')
     project = request.args.get('project')
     api_id = request.args.get('api_id')
     test_type = request.args.get('test_type')
-    # 只返回启用的用例（enabled = True）
+
     query = TestCase.query.filter_by(enabled=True)
+    if name:
+        query = query.filter(TestCase.name.like(f'%{name}%'))
     if project:
         query = query.filter_by(project=project)
     if api_id:
         query = query.filter_by(api_id=api_id)
     if test_type:
         query = query.filter_by(test_type=test_type)
-    cases = query.all()
-    return jsonify([{
-        'id': c.id,
-        'project': c.project,
-        'name': c.name,
-        'api_id': c.api_id,
-        'test_type': c.test_type,
-        'params': c.params,
-        'assertions': c.assertions,
-        'extract': c.extract,
-        'enabled': c.enabled
-    } for c in cases])
 
+    paginated = query.paginate(page=page, per_page=page_size, error_out=False)
+    cases = paginated.items
+
+    return jsonify({
+        'items': [{
+            'id': c.id,
+            'project': c.project,
+            'name': c.name,
+            'api_id': c.api_id,
+            'test_type': c.test_type,
+            'params': c.params,
+            'assertions': c.assertions,
+            'extract': c.extract,
+            'enabled': c.enabled
+        } for c in cases],
+        'total': paginated.total,
+        'page': page,
+        'page_size': page_size
+    })
 @testcases_bp.route('', methods=['POST'])
 @require_permissions('testcase:write')
 def create_testcase():

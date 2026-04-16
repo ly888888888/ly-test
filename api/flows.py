@@ -6,21 +6,44 @@ from api.auth import require_permissions
 
 flows_bp = Blueprint('flows', __name__)
 
+
 @flows_bp.route('', methods=['GET'])
 @require_permissions('flow:read', allow_anonymous=True)
 def list_flows():
-    # 只返回未删除（enabled=True）的流程，同时关联项目
-    flows = TestFlow.query.join(Project, TestFlow.project_id == Project.id).filter(TestFlow.enabled == True).all()
-    return jsonify([{
-        'id': f.id,
-        'name': f.name,
-        'description': f.description,
-        'project': f.project,
-        'project_id': f.project_id,
-        'steps': f.steps,
-        'data_source': f.data_source,
-        'enabled': f.enabled
-    } for f in flows])
+    # 分页参数
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 20, type=int)
+    # 搜索参数
+    name = request.args.get('name')
+    project_name = request.args.get('project')
+
+    # 基础查询：只查启用的流程，并关联项目表
+    query = TestFlow.query.join(Project, TestFlow.project_id == Project.id).filter(TestFlow.enabled == True)
+
+    if name:
+        query = query.filter(TestFlow.name.like(f'%{name}%'))
+    if project_name:
+        query = query.filter(Project.name == project_name)
+
+    paginated = query.paginate(page=page, per_page=page_size, error_out=False)
+    flows = paginated.items
+
+    return jsonify({
+        'items': [{
+            'id': f.id,
+            'name': f.name,
+            'description': f.description,
+            'project': f.project,
+            'project_id': f.project_id,
+            'steps': f.steps,
+            'data_source': f.data_source,
+            'enabled': f.enabled
+        } for f in flows],
+        'total': paginated.total,
+        'page': page,
+        'page_size': page_size
+    })
+
 
 @flows_bp.route('/<int:flow_id>', methods=['GET'])
 @require_permissions('flow:read', allow_anonymous=True)
@@ -97,6 +120,7 @@ def update_flow(flow_id):
 @flows_bp.route('/<int:flow_id>', methods=['DELETE'])
 @require_permissions('flow:write')
 def delete_flow(flow_id):
+    # 软删除：将 enabled 设为 False
     flow = TestFlow.query.filter_by(id=flow_id, enabled=True).first_or_404()
     flow.enabled = False
     db.session.commit()

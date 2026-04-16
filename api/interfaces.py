@@ -7,9 +7,14 @@ interfaces_bp = Blueprint('interfaces', __name__)
 @interfaces_bp.route('', methods=['GET'])
 @require_permissions('interface:read', allow_anonymous=True)
 def list_interfaces():
+    # 分页参数
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 20, type=int)
+    # 过滤参数
     project_name = request.args.get('project')
     path = request.args.get('path')
     method = request.args.get('method')
+
     query = ApiDefinition.query.join(Project, ApiDefinition.project_id == Project.id)
     if project_name:
         query = query.filter(Project.name == project_name)
@@ -17,16 +22,24 @@ def list_interfaces():
         query = query.filter(ApiDefinition.path == path)
     if method:
         query = query.filter(ApiDefinition.method == method)
-    interfaces = query.all()
-    return jsonify([{
-        'id': i.id,
-        'project': i.project,          # 通过 property 获取项目名
-        'project_id': i.project_id,
-        'path': i.path,
-        'method': i.method,
-        'schema': i.schema,
-        'description': i.description
-    } for i in interfaces])
+
+    paginated = query.paginate(page=page, per_page=page_size, error_out=False)
+    interfaces = paginated.items
+
+    return jsonify({
+        'items': [{
+            'id': i.id,
+            'project': i.project,
+            'project_id': i.project_id,
+            'path': i.path,
+            'method': i.method,
+            'schema': i.schema,
+            'description': i.description
+        } for i in interfaces],
+        'total': paginated.total,
+        'page': page,
+        'page_size': page_size
+    })
 
 @interfaces_bp.route('', methods=['POST'])
 @require_permissions('interface:write')
