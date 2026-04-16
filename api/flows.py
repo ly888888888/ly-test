@@ -1,41 +1,41 @@
 from flask import Blueprint, request, jsonify, current_app
-from models import db, TestFlow, FlowRun, FlowStepResult
+from models import db, TestFlow, FlowRun, FlowStepResult, Project
 from dsl.executor import execute_flow
 from dsl.parser import validate_flow_steps
 from api.auth import require_permissions
 
 flows_bp = Blueprint('flows', __name__)
 
-
 @flows_bp.route('', methods=['GET'])
 @require_permissions('flow:read', allow_anonymous=True)
 def list_flows():
-    # 只返回未删除（enabled=True）的流程
-    flows = TestFlow.query.filter_by(enabled=True).all()
+    # 只返回未删除（enabled=True）的流程，同时关联项目
+    flows = TestFlow.query.join(Project, TestFlow.project_id == Project.id).filter(TestFlow.enabled == True).all()
     return jsonify([{
         'id': f.id,
         'name': f.name,
         'description': f.description,
+        'project': f.project,
+        'project_id': f.project_id,
         'steps': f.steps,
         'data_source': f.data_source,
         'enabled': f.enabled
     } for f in flows])
 
-
 @flows_bp.route('/<int:flow_id>', methods=['GET'])
 @require_permissions('flow:read', allow_anonymous=True)
 def get_flow(flow_id):
-    # 只获取未删除的流程
     flow = TestFlow.query.filter_by(id=flow_id, enabled=True).first_or_404()
     return jsonify({
         'id': flow.id,
         'name': flow.name,
         'description': flow.description,
+        'project': flow.project,
+        'project_id': flow.project_id,
         'steps': flow.steps,
         'data_source': flow.data_source,
         'enabled': flow.enabled
     })
-
 
 @flows_bp.route('', methods=['POST'])
 @require_permissions('flow:write')
@@ -45,6 +45,15 @@ def create_flow():
     if not all(k in data for k in required):
         return jsonify({'error': 'Missing fields'}), 400
 
+    project_name = data.get('project')
+    if not project_name:
+        return jsonify({'error': '项目名称不能为空'}), 400
+    project = Project.query.filter_by(name=project_name).first()
+    if not project:
+        return jsonify({'error': f'项目 "{project_name}" 不存在，请先创建项目'}), 400
+    if not project.enabled:
+        return jsonify({'error': f'项目 "{project_name}" 已被禁用，无法创建流程'}), 400
+
     try:
         validate_flow_steps(data['steps'])
     except Exception as e:
@@ -53,6 +62,7 @@ def create_flow():
     flow = TestFlow(
         name=data['name'],
         description=data.get('description'),
+        project_id=project.id,
         steps=data['steps'],
         data_source=data.get('data_source'),
         enabled=data.get('enabled', True)
@@ -61,11 +71,9 @@ def create_flow():
     db.session.commit()
     return jsonify({'id': flow.id}), 201
 
-
 @flows_bp.route('/<int:flow_id>', methods=['PUT'])
 @require_permissions('flow:write')
 def update_flow(flow_id):
-    # 只允许更新未删除的流程
     flow = TestFlow.query.filter_by(id=flow_id, enabled=True).first_or_404()
     data = request.get_json() or {}
     if 'steps' in data:
@@ -73,34 +81,36 @@ def update_flow(flow_id):
             validate_flow_steps(data['steps'])
         except Exception as e:
             return jsonify({'error': str(e)}), 400
+    if 'project' in data:
+        project = Project.query.filter_by(name=data['project']).first()
+        if not project:
+            return jsonify({'error': f'项目 "{data["project"]}" 不存在'}), 400
+        if not project.enabled:
+            return jsonify({'error': f'项目 "{data["project"]}" 已被禁用'}), 400
+        flow.project_id = project.id
     for field in ['name', 'description', 'steps', 'data_source', 'enabled']:
         if field in data:
             setattr(flow, field, data[field])
     db.session.commit()
     return jsonify({'message': 'updated'})
 
-
 @flows_bp.route('/<int:flow_id>', methods=['DELETE'])
 @require_permissions('flow:write')
 def delete_flow(flow_id):
-    # 软删除：将 enabled 设为 False
     flow = TestFlow.query.filter_by(id=flow_id, enabled=True).first_or_404()
     flow.enabled = False
     db.session.commit()
     return jsonify({'message': 'deleted (soft)'})
 
-
 @flows_bp.route('/<int:flow_id>/run', methods=['POST'])
 @require_permissions('flow:execute')
 def run_flow(flow_id):
-    # 禁止运行已禁用的流程
     flow = TestFlow.query.filter_by(id=flow_id, enabled=True).first_or_404()
     data = request.get_json() or {}
     host = data.get('host', current_app.config.get('DEFAULT_HOST', '172.17.12.101:9500'))
     host_compare = data.get('host_compare', None)
     result = execute_flow(flow_id, host, host_compare=host_compare)
     return jsonify(result)
-
 
 @flows_bp.route('/results/<run_id>', methods=['GET'])
 @require_permissions('flow:read', allow_anonymous=True)

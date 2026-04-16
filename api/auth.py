@@ -127,7 +127,9 @@ def register():
         'flow:read',
         'function:read',
         'run:read',
-        'param:read'
+        'param:read',
+        'project:read',
+        'project:write'
     ]
     for p in default_perms:
         db.session.add(UserPermission(user_id=user.id, permission=p))

@@ -1,6 +1,6 @@
 from flask import Flask
 from config import Config
-from models import db, ensure_default_admin
+from models import db, ensure_default_admin, ensure_default_projects
 from api.interfaces import interfaces_bp
 from api.testcases import testcases_bp
 from api.run import run_bp
@@ -10,6 +10,7 @@ from api.auth import auth_bp
 from api.users import users_bp
 from api.nl_generate import nl_bp
 from api.param_templates import param_templates_bp
+from api.projects import projects_bp   # 新增
 
 def create_app():
     app = Flask(__name__)
@@ -26,6 +27,7 @@ def create_app():
     app.register_blueprint(users_bp, url_prefix='/api')
     app.register_blueprint(nl_bp, url_prefix='/api')
     app.register_blueprint(param_templates_bp, url_prefix='/api/param-templates')
+    app.register_blueprint(projects_bp, url_prefix='/api/projects')  # 新增
 
     @app.before_request
     def _init_default_admin_once():
@@ -49,4 +51,5 @@ if __name__ == '__main__':
             app.config.get('ADMIN_PASSWORD', 'admin123'),
             permissions=['superadmin']
         )
+        ensure_default_projects()   # 初始化默认项目
     app.run(debug=True, host='0.0.0.0', port=5000)

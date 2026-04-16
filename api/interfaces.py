@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from models import db, ApiDefinition
+from models import db, ApiDefinition, Project
 from api.auth import require_permissions
 
 interfaces_bp = Blueprint('interfaces', __name__)
@@ -7,20 +7,21 @@ interfaces_bp = Blueprint('interfaces', __name__)
 @interfaces_bp.route('', methods=['GET'])
 @require_permissions('interface:read', allow_anonymous=True)
 def list_interfaces():
-    project = request.args.get('project')
+    project_name = request.args.get('project')
     path = request.args.get('path')
     method = request.args.get('method')
-    query = ApiDefinition.query
-    if project:
-        query = query.filter_by(project=project)
+    query = ApiDefinition.query.join(Project, ApiDefinition.project_id == Project.id)
+    if project_name:
+        query = query.filter(Project.name == project_name)
     if path:
-        query = query.filter_by(path=path)
+        query = query.filter(ApiDefinition.path == path)
     if method:
-        query = query.filter_by(method=method)
+        query = query.filter(ApiDefinition.method == method)
     interfaces = query.all()
     return jsonify([{
         'id': i.id,
-        'project': i.project,
+        'project': i.project,          # 通过 property 获取项目名
+        'project_id': i.project_id,
         'path': i.path,
         'method': i.method,
         'schema': i.schema,
@@ -35,9 +36,16 @@ def create_interface():
     if not all(k in data for k in required):
         return jsonify({'error': 'Missing fields'}), 400
 
-    # 检查是否已存在相同的 project、path、method 组合
+    # 根据项目名称查找项目
+    project = Project.query.filter_by(name=data['project']).first()
+    if not project:
+        return jsonify({'error': f'项目 "{data["project"]}" 不存在，请先创建项目'}), 400
+    if not project.enabled:
+        return jsonify({'error': f'项目 "{data["project"]}" 已被禁用，无法创建接口'}), 400
+
+    # 检查重复
     existing = ApiDefinition.query.filter_by(
-        project=data['project'],
+        project_id=project.id,
         path=data['path'],
         method=data['method']
     ).first()
@@ -45,7 +53,7 @@ def create_interface():
         return jsonify({'error': '接口已存在（相同项目、路径和方法）'}), 400
 
     interface = ApiDefinition(
-        project=data['project'],
+        project_id=project.id,
         path=data['path'],
         method=data['method'],
         schema=data['schema'],
@@ -62,6 +70,7 @@ def get_interface(id):
     return jsonify({
         'id': interface.id,
         'project': interface.project,
+        'project_id': interface.project_id,
         'path': interface.path,
         'method': interface.method,
         'schema': interface.schema,
@@ -73,7 +82,15 @@ def get_interface(id):
 def update_interface(id):
     interface = ApiDefinition.query.get_or_404(id)
     data = request.get_json()
-    for field in ['project', 'path', 'method', 'schema', 'description']:
+    # 如果传递了 project 字段，需要更新项目关联
+    if 'project' in data:
+        project = Project.query.filter_by(name=data['project']).first()
+        if not project:
+            return jsonify({'error': f'项目 "{data["project"]}" 不存在'}), 400
+        if not project.enabled:
+            return jsonify({'error': f'项目 "{data["project"]}" 已被禁用'}), 400
+        interface.project_id = project.id
+    for field in ['path', 'method', 'schema', 'description']:
         if field in data:
             setattr(interface, field, data[field])
     db.session.commit()
@@ -83,7 +100,6 @@ def update_interface(id):
 @require_permissions('interface:write')
 def delete_interface(id):
     interface = ApiDefinition.query.get_or_404(id)
-    # 检查是否被用例引用，若有则拒绝删除
     if interface.test_cases:
         return jsonify({'error': 'Interface has test cases, cannot delete'}), 400
     db.session.delete(interface)

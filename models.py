@@ -4,6 +4,21 @@ from werkzeug.security import generate_password_hash
 
 db = SQLAlchemy()
 
+# ---------- 新增 Project 模型 ----------
+class Project(db.Model):
+    __tablename__ = 'project'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    description = db.Column(db.Text)
+    enabled = db.Column(db.Boolean, default=True)          # 1可用 0禁用
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 关联
+    apis = db.relationship('ApiDefinition', backref='project_ref', lazy=True)
+    flows = db.relationship('TestFlow', backref='project_ref', lazy=True)
+
+
 class User(db.Model):
     __tablename__ = 'user'
     id = db.Column(db.Integer, primary_key=True)
@@ -16,6 +31,7 @@ class User(db.Model):
     permissions = db.relationship('UserPermission', backref='user', lazy=True, cascade='all, delete-orphan')
     tokens = db.relationship('UserToken', backref='user', lazy=True, cascade='all, delete-orphan')
 
+
 class UserPermission(db.Model):
     __tablename__ = 'user_permission'
     id = db.Column(db.Integer, primary_key=True)
@@ -27,6 +43,7 @@ class UserPermission(db.Model):
         db.UniqueConstraint('user_id', 'permission', name='uq_user_permission'),
     )
 
+
 class UserToken(db.Model):
     __tablename__ = 'user_token'
     id = db.Column(db.Integer, primary_key=True)
@@ -36,10 +53,11 @@ class UserToken(db.Model):
     revoked = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+
 class ApiDefinition(db.Model):
     __tablename__ = 'api_definition'
     id = db.Column(db.Integer, primary_key=True)
-    project = db.Column(db.String(50), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)   # 改为外键
     path = db.Column(db.String(255), nullable=False)
     method = db.Column(db.String(10), default='GET')
     schema = db.Column(db.JSON)
@@ -49,39 +67,47 @@ class ApiDefinition(db.Model):
 
     test_cases = db.relationship('TestCase', backref='api', lazy=True)
 
+    @property
+    def project(self):
+        """兼容前端，返回项目名称"""
+        return self.project_ref.name if self.project_ref else None
+
+
 class ParamTemplate(db.Model):
     __tablename__ = 'param_template'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
-    type = db.Column(db.Enum('fixed','db_query','random'), nullable=False)
+    type = db.Column(db.Enum('fixed', 'db_query', 'random'), nullable=False)
     value = db.Column(db.Text, nullable=False)
     description = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+
 class TestCase(db.Model):
     __tablename__ = 'test_case'
     id = db.Column(db.Integer, primary_key=True)
-    project = db.Column(db.String(50), nullable=False)
+    project = db.Column(db.String(50), nullable=False)   # 用例的项目字段可以保留字符串，或者也改为外键，为了简单暂时保留
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     api_id = db.Column(db.Integer, db.ForeignKey('api_definition.id'), nullable=False)
-    test_type = db.Column(db.Enum('smoke','structural','logic','compare','monitor','other'), nullable=False)
+    test_type = db.Column(db.Enum('smoke', 'structural', 'logic', 'compare', 'monitor', 'other'), nullable=False)
     params = db.Column(db.JSON, nullable=False)
-    assertions = db.Column(db.JSON, nullable=True)  # 断言定义，可为空
+    assertions = db.Column(db.JSON, nullable=True)
     expected_status = db.Column(db.Integer, default=200)
     enabled = db.Column(db.Boolean, default=True)
-    extract = db.Column(db.JSON, nullable=True)  # 新增
+    extract = db.Column(db.JSON, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     results = db.relationship('TestResult', backref='case', lazy=True)
+
 
 class TestResult(db.Model):
     __tablename__ = 'test_result'
     id = db.Column(db.Integer, primary_key=True)
     case_id = db.Column(db.Integer, db.ForeignKey('test_case.id'), nullable=False)
     run_id = db.Column(db.String(64), nullable=False)
-    status = db.Column(db.Enum('success','fail','error'), nullable=False)
+    status = db.Column(db.Enum('success', 'fail', 'error'), nullable=False)
     http_status = db.Column(db.Integer)
     response_body = db.Column(db.Text)
     error_info = db.Column(db.Text)
@@ -89,16 +115,22 @@ class TestResult(db.Model):
     end_time = db.Column(db.DateTime)
     duration_ms = db.Column(db.Integer)
 
+
 class TestFlow(db.Model):
     __tablename__ = 'test_flow'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
-    steps = db.Column(db.JSON, nullable=False)  # 步骤列表，每个步骤包含 api_id, params, extract, assertions 等
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)   # 改为外键
+    steps = db.Column(db.JSON, nullable=False)
     data_source = db.Column(db.JSON, nullable=True)
     enabled = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @property
+    def project(self):
+        return self.project_ref.name if self.project_ref else None
 
 
 class FlowRun(db.Model):
@@ -139,15 +171,10 @@ class FlowStepResult(db.Model):
 
 
 def ensure_default_admin(username, password, permissions=None):
-    """
-    Ensure a default admin user exists.
-    """
     user = User.query.filter_by(username=username).first()
     if user:
-        # ensure superadmin permission exists for default admin
-        perms = permissions or ['superadmin']
         existing = {p.permission for p in user.permissions}
-        for p in perms:
+        for p in (permissions or ['superadmin']):
             if p not in existing:
                 db.session.add(UserPermission(user_id=user.id, permission=p))
         db.session.commit()
@@ -159,8 +186,24 @@ def ensure_default_admin(username, password, permissions=None):
     )
     db.session.add(user)
     db.session.flush()
-    perms = permissions or ['superadmin']
-    for p in perms:
+    for p in (permissions or ['superadmin']):
         db.session.add(UserPermission(user_id=user.id, permission=p))
     db.session.commit()
     return user
+
+
+def ensure_default_projects():
+    """初始化默认项目，确保系统有可用的项目"""
+    default_projects = [
+        {'name': 'demo', 'description': '演示项目', 'enabled': True},
+        {'name': 'edubox', 'description': '教育盒子项目', 'enabled': True},
+        {'name': 'jupiter', 'description': 'Jupiter项目', 'enabled': True},
+    ]
+    for proj in default_projects:
+        if not Project.query.filter_by(name=proj['name']).first():
+            db.session.add(Project(
+                name=proj['name'],
+                description=proj['description'],
+                enabled=proj['enabled']
+            ))
+    db.session.commit()

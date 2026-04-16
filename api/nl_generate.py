@@ -4,14 +4,21 @@ from datetime import datetime
 from genson import SchemaBuilder
 from flask import Blueprint, request, jsonify
 from api.auth import require_permissions
-from models import ApiDefinition
+from models import ApiDefinition, Project
 
 nl_bp = Blueprint('nl_generate', __name__)
 
 
 def extract_project(text):
+    """提取项目名称，统一转为小写并去除首尾空格"""
     match = re.search(r'(\w+?)项目', text)
-    return match.group(1) if match else 'edubox'
+    if match:
+        return match.group(1).strip().lower()
+    # 也支持 "项目：xxx" 格式
+    match = re.search(r'项目[:：]\s*([^\s,，]+)', text)
+    if match:
+        return match.group(1).strip().lower()
+    return 'edubox'
 
 
 def extract_path_and_query(text):
@@ -35,12 +42,17 @@ def _normalize_path(raw_path):
     return raw_path.split('?', 1)[0]
 
 
-def project_exists(project):
-    return ApiDefinition.query.filter_by(project=project).first() is not None
+def project_exists(project_name):
+    """检查项目是否存在（忽略大小写）"""
+    return Project.query.filter(Project.name.ilike(project_name)).first() is not None
 
 
-def interface_exists(project, path, method):
-    return ApiDefinition.query.filter_by(project=project, path=path, method=method).first() is not None
+def interface_exists(project_name, path, method):
+    """检查接口是否存在（基于项目名称、路径、方法）"""
+    project = Project.query.filter(Project.name.ilike(project_name)).first()
+    if not project:
+        return False
+    return ApiDefinition.query.filter_by(project_id=project.id, path=path, method=method).first() is not None
 
 
 def extract_method(text):
@@ -504,7 +516,20 @@ def generate():
     if not text:
         return jsonify({'error': 'text required', 'expected': _expected_example()}), 400
 
-    project = extract_project(text)
+    project = extract_project(text).strip().lower()
+    # 检查项目是否存在（忽略大小写）
+    project_obj = Project.query.filter(Project.name.ilike(project)).first()
+    if not project_obj:
+        return jsonify({
+            'error': f'项目 "{project}" 不存在，请先创建项目',
+            'code': 'PROJECT_NOT_FOUND'
+        }), 400
+    if not project_obj.enabled:
+        return jsonify({
+            'error': f'项目 "{project}" 已被禁用，无法使用',
+            'code': 'PROJECT_DISABLED'
+        }), 400
+
     path, query = extract_path_and_query(text)
     if not path:
         return jsonify({'error': '未找到接口路径', 'expected': _expected_example()}), 400
@@ -559,12 +584,13 @@ def generate():
     real_api_id = 0
     if not has_flow and requested_tests:
         main_path = _normalize_path(path)
-        api_def = ApiDefinition.query.filter_by(project=project, path=main_path, method=method).first()
-        if api_def:
-            real_api_id = api_def.id
-        else:
-            print(f"Warning: 未找到接口 {project} {method} {main_path}，使用 api_id=0")
-    # ----------------------------
+        proj = Project.query.filter(Project.name.ilike(project)).first()
+        if proj:
+            api_def = ApiDefinition.query.filter_by(project_id=proj.id, path=main_path, method=method).first()
+            if api_def:
+                real_api_id = api_def.id
+            else:
+                print(f"Warning: 未找到接口 {project} {method} {main_path}，使用 api_id=0")
 
     # 不再生成文件，只构建返回数据
     interface_payload = None
@@ -609,7 +635,7 @@ def generate():
             "enabled": True
         }
 
-    # 返回结果（不再包含 curl_text 和 files）
+    # 返回结果
     return jsonify({
         'interfacePayload': interface_payload,
         'testcases': testcases,
