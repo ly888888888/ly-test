@@ -10,7 +10,8 @@ def list_testcases():
     project = request.args.get('project')
     api_id = request.args.get('api_id')
     test_type = request.args.get('test_type')
-    query = TestCase.query
+    # 只返回启用的用例（enabled = True）
+    query = TestCase.query.filter_by(enabled=True)
     if project:
         query = query.filter_by(project=project)
     if api_id:
@@ -60,7 +61,8 @@ def create_testcase():
 @testcases_bp.route('/<int:id>', methods=['GET'])
 @require_permissions('testcase:read', allow_anonymous=True)
 def get_testcase(id):
-    case = TestCase.query.get_or_404(id)
+    # 只返回启用的用例
+    case = TestCase.query.filter_by(id=id, enabled=True).first_or_404()
     return jsonify({
         'id': case.id,
         'project': case.project,
@@ -89,7 +91,8 @@ def update_testcase(id):
 @testcases_bp.route('/<int:id>', methods=['DELETE'])
 @require_permissions('testcase:write')
 def delete_testcase(id):
+    # 软删除：将 enabled 设为 False
     case = TestCase.query.get_or_404(id)
-    db.session.delete(case)
+    case.enabled = False
     db.session.commit()
-    return jsonify({'message': 'deleted'})
+    return jsonify({'message': 'deleted (soft)'})
