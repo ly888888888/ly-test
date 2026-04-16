@@ -376,9 +376,12 @@ def execute_flow(flow_id, host, host_compare=None):
             db.session.add(record)
 
     run_end = time.time()
-    flow_run.status = 'fail' if failed else 'success'
-    flow_run.end_time = datetime.fromtimestamp(run_end)
-    flow_run.duration_ms = int((run_end - run_start) * 1000)
+    # 使用直接 UPDATE 语句，避免对象属性意外更新其他字段（如 flow_id）
+    db.session.query(FlowRun).filter(FlowRun.id == flow_run.id).update({
+        'status': 'fail' if failed else 'success',
+        'end_time': datetime.fromtimestamp(run_end),
+        'duration_ms': int((run_end - run_start) * 1000)
+    })
     db.session.commit()
 
     return {'flow_id': flow_id, 'run_id': run_id, 'results': results}

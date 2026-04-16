@@ -10,8 +10,8 @@ flows_bp = Blueprint('flows', __name__)
 @flows_bp.route('', methods=['GET'])
 @require_permissions('flow:read', allow_anonymous=True)
 def list_flows():
-    query = TestFlow.query
-    flows = query.all()
+    # 只返回未删除（enabled=True）的流程
+    flows = TestFlow.query.filter_by(enabled=True).all()
     return jsonify([{
         'id': f.id,
         'name': f.name,
@@ -25,7 +25,8 @@ def list_flows():
 @flows_bp.route('/<int:flow_id>', methods=['GET'])
 @require_permissions('flow:read', allow_anonymous=True)
 def get_flow(flow_id):
-    flow = TestFlow.query.get_or_404(flow_id)
+    # 只获取未删除的流程
+    flow = TestFlow.query.filter_by(id=flow_id, enabled=True).first_or_404()
     return jsonify({
         'id': flow.id,
         'name': flow.name,
@@ -64,7 +65,8 @@ def create_flow():
 @flows_bp.route('/<int:flow_id>', methods=['PUT'])
 @require_permissions('flow:write')
 def update_flow(flow_id):
-    flow = TestFlow.query.get_or_404(flow_id)
+    # 只允许更新未删除的流程
+    flow = TestFlow.query.filter_by(id=flow_id, enabled=True).first_or_404()
     data = request.get_json() or {}
     if 'steps' in data:
         try:
@@ -81,15 +83,18 @@ def update_flow(flow_id):
 @flows_bp.route('/<int:flow_id>', methods=['DELETE'])
 @require_permissions('flow:write')
 def delete_flow(flow_id):
-    flow = TestFlow.query.get_or_404(flow_id)
-    db.session.delete(flow)
+    # 软删除：将 enabled 设为 False
+    flow = TestFlow.query.filter_by(id=flow_id, enabled=True).first_or_404()
+    flow.enabled = False
     db.session.commit()
-    return jsonify({'message': 'deleted'})
+    return jsonify({'message': 'deleted (soft)'})
 
 
 @flows_bp.route('/<int:flow_id>/run', methods=['POST'])
 @require_permissions('flow:execute')
 def run_flow(flow_id):
+    # 禁止运行已禁用的流程
+    flow = TestFlow.query.filter_by(id=flow_id, enabled=True).first_or_404()
     data = request.get_json() or {}
     host = data.get('host', current_app.config.get('DEFAULT_HOST', '172.17.12.101:9500'))
     host_compare = data.get('host_compare', None)
