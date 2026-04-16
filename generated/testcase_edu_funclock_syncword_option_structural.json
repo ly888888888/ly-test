@@ -1,8 +1,0 @@
-{
-  "project": "edubox",
-  "name": "/edu/funclock/syncword/option 结构测试",
-  "api_id": 3,
-  "test_type": "structural",
-  "params": {},
-  "enabled": true
-}

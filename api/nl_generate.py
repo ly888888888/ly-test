@@ -1,7 +1,5 @@
 ﻿import json
-import os
 import re
-import platform
 from datetime import datetime
 from genson import SchemaBuilder
 from flask import Blueprint, request, jsonify
@@ -148,15 +146,6 @@ def query_to_params(query_dict):
     return params
 
 
-def save_json(payload, filename):
-    with open(filename, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False, indent=2)
-
-
-def get_line_break():
-    return "^" if platform.system() == "Windows" else "\\"
-
-
 def generate_interface_payload(project, path, method, schema, description):
     return {
         "project": project,
@@ -167,19 +156,6 @@ def generate_interface_payload(project, path, method, schema, description):
     }
 
 
-def generate_interface_curl(base_url, payload, safe_path, out_dir):
-    filename = f"interface_{safe_path}.json"
-    save_json(payload, os.path.join(out_dir, filename))
-    lb = get_line_break()
-    return f"""
-# 创建接口
-curl -s -w \\\"\\nHTTP_STATUS:%{{http_code}}\\n\\\" -X POST {base_url}/api/interfaces {lb}
--H \\\"Content-Type: application/json\\\" {lb}
--d @{filename}
-"""
-
-
-# 增加 api_id 参数，不再使用占位符 0
 def generate_testcase_payload(project, test_type, name_suffix, params, api_id, assertions=None, expected_status=None):
     payload = {
         "project": project,
@@ -194,36 +170,6 @@ def generate_testcase_payload(project, test_type, name_suffix, params, api_id, a
     if expected_status is not None:
         payload["expected_status"] = expected_status
     return payload
-
-
-def generate_testcase_curl(base_url, payload, safe_path, test_type, out_dir):
-    filename = f"testcase_{safe_path}_{test_type}.json"
-    save_json(payload, os.path.join(out_dir, filename))
-    lb = get_line_break()
-    return f"""
-curl -s -w \\\"\\nHTTP_STATUS:%{{http_code}}\\n\\\" -X POST {base_url}/api/testcases {lb}
--H \\\"Content-Type: application/json\\\" {lb}
--d @{filename}
-"""
-
-
-def generate_flow_curl(base_url, flow_name, steps, out_dir, data_source=None, enabled=True):
-    payload = {
-        "name": flow_name,
-        "steps": steps,
-        "enabled": enabled
-    }
-    if data_source is not None:
-        payload["data_source"] = data_source
-    filename = f"flow_{flow_name}.json".replace(' ', '_')
-    save_json(payload, os.path.join(out_dir, filename))
-    lb = get_line_break()
-    return f"""
-# 创建测试流程
-curl -s -w \\\"\\nHTTP_STATUS:%{{http_code}}\\n\\\" -X POST {base_url}/api/flows {lb}
--H \\\"Content-Type: application/json\\\" {lb}
--d @{filename}
-"""
 
 
 def extract_requested_tests(text):
@@ -617,22 +563,13 @@ def generate():
         if api_def:
             real_api_id = api_def.id
         else:
-            # 理论上前面已校验存在，这里作为 fallback
             print(f"Warning: 未找到接口 {project} {method} {main_path}，使用 api_id=0")
     # ----------------------------
 
-    out_dir = os.path.join(os.getcwd(), 'generated')
-    os.makedirs(out_dir, exist_ok=True)
-
-    base_url = data.get('base_url') or request.host_url.rstrip('/')
-
-    curl_parts = []
-
-    interface_payload = generate_interface_payload(project, path, method, schema, f"自动创建接口: {path}")
+    # 不再生成文件，只构建返回数据
+    interface_payload = None
     if create_interface:
-        curl_parts.append(generate_interface_curl(base_url, interface_payload, safe_path, out_dir))
-    else:
-        interface_payload = None
+        interface_payload = generate_interface_payload(project, path, method, schema, f"自动创建接口: {path}")
 
     testcases = []
     flow_payload = None
@@ -641,33 +578,27 @@ def generate():
             smoke_assertions = extract_assertions(text, 'smoke')
             payload = generate_testcase_payload(project, 'smoke', f"{path} 冒烟测试", base_params, real_api_id, assertions=smoke_assertions or None, expected_status=200)
             testcases.append(payload)
-            curl_parts.append(generate_testcase_curl(base_url, payload, safe_path, 'smoke', out_dir))
         if 'structural' in requested_tests:
             structural_assertions = extract_assertions(text, 'structural')
             payload = generate_testcase_payload(project, 'structural', f"{path} 结构测试", base_params, real_api_id, assertions=structural_assertions or None)
             testcases.append(payload)
-            curl_parts.append(generate_testcase_curl(base_url, payload, safe_path, 'structural', out_dir))
         if 'logic' in requested_tests:
             logic_cases = extract_assertions(text, 'logic')
             if logic_cases and isinstance(logic_cases, list) and logic_cases and isinstance(logic_cases[0], list):
                 for idx, assertions in enumerate(logic_cases, start=1):
                     payload = generate_testcase_payload(project, 'logic', f"{path} 逻辑测试{idx}", base_params, real_api_id, assertions=assertions)
                     testcases.append(payload)
-                    curl_parts.append(generate_testcase_curl(base_url, payload, safe_path, f'logic{idx}', out_dir))
             else:
                 payload = generate_testcase_payload(project, 'logic', f"{path} 逻辑测试", base_params, real_api_id)
                 testcases.append(payload)
-                curl_parts.append(generate_testcase_curl(base_url, payload, safe_path, 'logic', out_dir))
         if 'compare' in requested_tests:
             compare_assertions = extract_assertions(text, 'compare')
             payload = generate_testcase_payload(project, 'compare', f"{path} 对比测试", base_params, real_api_id, assertions=compare_assertions or None)
             testcases.append(payload)
-            curl_parts.append(generate_testcase_curl(base_url, payload, safe_path, 'compare', out_dir))
         if 'monitor' in requested_tests:
             monitor_assertions = extract_assertions(text, 'monitor')
             payload = generate_testcase_payload(project, 'monitor', f"{path} 监控测试", base_params, real_api_id, assertions=monitor_assertions or None)
             testcases.append(payload)
-            curl_parts.append(generate_testcase_curl(base_url, payload, safe_path, 'monitor', out_dir))
 
     if parsed_steps:
         flow_steps = build_flow_steps(parsed_steps)
@@ -677,20 +608,10 @@ def generate():
             "steps": flow_steps,
             "enabled": True
         }
-        curl_parts.append(generate_flow_curl(base_url, flow_name, flow_steps, out_dir))
-        curl_parts.append("\n说明: flow steps 中 api_id 使用占位符 {接口ID_stepN}，请替换为对应接口定义ID\n")
 
-    curl_text = "\n".join([p for p in curl_parts if p])
-    txt_name = f"{safe_path}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.txt"
-    with open(os.path.join(out_dir, txt_name), 'w', encoding='utf-8') as f:
-        f.write(curl_text)
-
+    # 返回结果（不再包含 curl_text 和 files）
     return jsonify({
         'interfacePayload': interface_payload,
         'testcases': testcases,
-        'flowPayload': flow_payload,
-        'curl_text': curl_text,
-        'files': {
-            'txt': txt_name
-        }
+        'flowPayload': flow_payload
     })

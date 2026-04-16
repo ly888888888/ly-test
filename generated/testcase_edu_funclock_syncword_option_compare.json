@@ -1,8 +1,0 @@
-{
-  "project": "edubox",
-  "name": "/edu/funclock/syncword/option 对比测试",
-  "api_id": 3,
-  "test_type": "compare",
-  "params": {},
-  "enabled": true
-}
