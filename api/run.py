@@ -3,7 +3,7 @@ import uuid
 import time
 from datetime import datetime
 from flask import Blueprint, request, jsonify, current_app
-from models import db, TestCase, TestResult, ApiDefinition
+from models import db, TestCase, ApiDefinition, TestResult, FlowRun
 from tools.http_client import HttpClient, RAWJSON
 from tools.json_validate import struct_validate_get, struct_validate_post, struct_validate_put, struct_validate_delete
 from tools.conf import TestLogInfo, TestAssert
@@ -242,3 +242,71 @@ def get_results(run_id):
         'duration_ms': r.duration_ms,
         'start_time': r.start_time.isoformat() if r.start_time else None
     } for r in results])
+
+
+@run_bp.route('/records', methods=['GET'])
+@require_permissions('run:read')
+def list_run_records():
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 20, type=int)
+    run_id = request.args.get('run_id')
+    record_type = request.args.get('type')  # 'testcase' 或 'flow'
+
+    all_records = []
+    # 用例记录
+    if not record_type or record_type == 'testcase':
+        query_case = TestResult.query
+        if run_id:
+            query_case = query_case.filter(TestResult.run_id.like(f'%{run_id}%'))
+        for r in query_case.all():
+            all_records.append({
+                'type': 'testcase',
+                'id': r.id,
+                'run_id': r.run_id,
+                'case_id': r.case_id,
+                'status': r.status,
+                'http_status': r.http_status,
+                'error_info': r.error_info,
+                'start_time': r.start_time,
+                'end_time': r.end_time,
+                'duration_ms': r.duration_ms,
+            })
+    # 流程记录
+    if not record_type or record_type == 'flow':
+        query_flow = FlowRun.query
+        if run_id:
+            query_flow = query_flow.filter(FlowRun.run_id.like(f'%{run_id}%'))
+        for r in query_flow.all():
+            all_records.append({
+                'type': 'flow',
+                'id': r.id,
+                'run_id': r.run_id,
+                'flow_id': r.flow_id,
+                'status': r.status,
+                'error_info': r.error_info,
+                'start_time': r.start_time,
+                'end_time': r.end_time,
+                'duration_ms': r.duration_ms,
+                'http_status': None,
+            })
+
+    # 按开始时间倒序
+    all_records.sort(key=lambda x: x['start_time'] or datetime.min, reverse=True)
+    total = len(all_records)
+    start = (page - 1) * page_size
+    end = start + page_size
+    items = all_records[start:end]
+
+    # 格式化时间
+    for item in items:
+        if item['start_time']:
+            item['start_time'] = item['start_time'].isoformat()
+        if item['end_time']:
+            item['end_time'] = item['end_time'].isoformat()
+
+    return jsonify({
+        'items': items,
+        'total': total,
+        'page': page,
+        'page_size': page_size
+    })
