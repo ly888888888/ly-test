@@ -3,7 +3,7 @@ import uuid
 import time
 from datetime import datetime
 from flask import Blueprint, request, jsonify, current_app
-from models import db, TestCase, ApiDefinition, TestResult, FlowRun
+from models import db, TestCase, ApiDefinition, TestResult, FlowRun, FlowStepResult
 from tools.http_client import HttpClient, RAWJSON
 from tools.json_validate import struct_validate_get, struct_validate_post, struct_validate_put, struct_validate_delete
 from tools.conf import TestLogInfo, TestAssert
@@ -250,15 +250,22 @@ def list_run_records():
     page = request.args.get('page', 1, type=int)
     page_size = request.args.get('page_size', 20, type=int)
     run_id = request.args.get('run_id')
-    record_type = request.args.get('type')  # 'testcase' 或 'flow'
+    record_type = request.args.get('type')       # testcase / flow
+    target_id = request.args.get('target_id')    # case_id 或 flow_id
+    status = request.args.get('status')          # success/fail/error/running
 
     all_records = []
+
     # 用例记录
     if not record_type or record_type == 'testcase':
-        query_case = TestResult.query
+        query = TestResult.query
         if run_id:
-            query_case = query_case.filter(TestResult.run_id.like(f'%{run_id}%'))
-        for r in query_case.all():
+            query = query.filter(TestResult.run_id.like(f'%{run_id}%'))
+        if target_id:
+            query = query.filter_by(case_id=target_id)
+        if status:
+            query = query.filter_by(status=status)
+        for r in query.all():
             all_records.append({
                 'type': 'testcase',
                 'id': r.id,
@@ -271,19 +278,35 @@ def list_run_records():
                 'end_time': r.end_time,
                 'duration_ms': r.duration_ms,
             })
+
     # 流程记录
     if not record_type or record_type == 'flow':
-        query_flow = FlowRun.query
+        query = FlowRun.query
         if run_id:
-            query_flow = query_flow.filter(FlowRun.run_id.like(f'%{run_id}%'))
-        for r in query_flow.all():
+            query = query.filter(FlowRun.run_id.like(f'%{run_id}%'))
+        if target_id:
+            query = query.filter_by(flow_id=target_id)
+        if status:
+            query = query.filter_by(status=status)
+        for r in query.all():
+            error_info = r.error_info
+            # 如果流程失败但 error_info 为空，从步骤中获取
+            if r.status == 'fail' and not error_info:
+                fail_steps = FlowStepResult.query.filter_by(flow_run_id=r.id, status='fail').all()
+                if fail_steps:
+                    errors = []
+                    for step in fail_steps:
+                        step_name = step.step_name or f"步骤{step.step_index+1}" if step.step_index is not None else "未知步骤"
+                        err_msg = step.error_info or "未知错误"
+                        errors.append(f"{step_name}: {err_msg}")
+                    error_info = '；'.join(errors)
             all_records.append({
                 'type': 'flow',
                 'id': r.id,
                 'run_id': r.run_id,
                 'flow_id': r.flow_id,
                 'status': r.status,
-                'error_info': r.error_info,
+                'error_info': error_info,
                 'start_time': r.start_time,
                 'end_time': r.end_time,
                 'duration_ms': r.duration_ms,
@@ -291,6 +314,7 @@ def list_run_records():
             })
 
     # 按开始时间倒序
+    from datetime import datetime
     all_records.sort(key=lambda x: x['start_time'] or datetime.min, reverse=True)
     total = len(all_records)
     start = (page - 1) * page_size
@@ -310,3 +334,32 @@ def list_run_records():
         'page': page,
         'page_size': page_size
     })
+
+
+@run_bp.route('/cancel/<run_id>', methods=['POST'])
+@require_permissions('run:execute')
+def cancel_run(run_id):
+    """手动终止运行中的任务（更新状态为 fail）"""
+    # 处理用例运行记录
+    case_result = TestResult.query.filter_by(run_id=run_id, status='running').first()
+    if case_result:
+        case_result.status = 'fail'
+        case_result.error_info = '用户手动终止'
+        case_result.end_time = datetime.utcnow()
+        if case_result.start_time:
+            case_result.duration_ms = int((case_result.end_time - case_result.start_time).total_seconds() * 1000)
+        db.session.commit()
+        return jsonify({'message': '用例运行已终止'})
+
+    # 处理流程运行记录
+    flow_run = FlowRun.query.filter_by(run_id=run_id, status='running').first()
+    if flow_run:
+        flow_run.status = 'fail'
+        flow_run.error_info = '用户手动终止'
+        flow_run.end_time = datetime.utcnow()
+        if flow_run.start_time:
+            flow_run.duration_ms = int((flow_run.end_time - flow_run.start_time).total_seconds() * 1000)
+        db.session.commit()
+        return jsonify({'message': '流程运行已终止'})
+
+    return jsonify({'error': '未找到运行中的记录'}), 404
