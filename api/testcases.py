@@ -39,7 +39,9 @@ def list_testcases():
             'params': c.params,
             'assertions': c.assertions,
             'extract': c.extract,
-            'enabled': c.enabled
+            'enabled': c.enabled,
+            'created_at': c.created_at.isoformat() if c.created_at else None,
+            'updated_at': c.updated_at.isoformat() if c.updated_at else None
         } for c in cases],
         'total': paginated.total,
         'page': page,
@@ -88,7 +90,9 @@ def get_testcase(id):
         'assertions': case.assertions,
         'extract': case.extract,
         'expected_status': case.expected_status,
-        'enabled': case.enabled
+        'enabled': case.enabled,
+        'created_at': case.created_at.isoformat() if case.created_at else None,
+        'updated_at': case.updated_at.isoformat() if case.updated_at else None
     })
 
 @testcases_bp.route('/<int:id>', methods=['PUT'])

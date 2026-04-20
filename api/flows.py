@@ -37,7 +37,9 @@ def list_flows():
             'project_id': f.project_id,
             'steps': f.steps,
             'data_source': f.data_source,
-            'enabled': f.enabled
+            'enabled': f.enabled,
+            'created_at': f.created_at.isoformat() if f.created_at else None,
+            'updated_at': f.updated_at.isoformat() if f.updated_at else None
         } for f in flows],
         'total': paginated.total,
         'page': page,
@@ -57,7 +59,9 @@ def get_flow(flow_id):
         'project_id': flow.project_id,
         'steps': flow.steps,
         'data_source': flow.data_source,
-        'enabled': flow.enabled
+        'enabled': flow.enabled,
+        'created_at': flow.created_at.isoformat() if flow.created_at else None,
+        'updated_at': flow.updated_at.isoformat() if flow.updated_at else None
     })
 
 @flows_bp.route('', methods=['POST'])

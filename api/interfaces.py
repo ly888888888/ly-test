@@ -34,7 +34,9 @@ def list_interfaces():
             'path': i.path,
             'method': i.method,
             'schema': i.schema,
-            'description': i.description
+            'description': i.description,
+            'created_at': i.created_at.isoformat() if i.created_at else None,
+            'updated_at': i.updated_at.isoformat() if i.updated_at else None
         } for i in interfaces],
         'total': paginated.total,
         'page': page,
@@ -87,7 +89,9 @@ def get_interface(id):
         'path': interface.path,
         'method': interface.method,
         'schema': interface.schema,
-        'description': interface.description
+        'description': interface.description,
+        'created_at': interface.created_at.isoformat() if interface.created_at else None,
+        'updated_at': interface.updated_at.isoformat() if interface.updated_at else None
     })
 
 @interfaces_bp.route('/<int:id>', methods=['PUT'])
