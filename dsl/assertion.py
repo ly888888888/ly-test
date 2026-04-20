@@ -12,16 +12,11 @@ class AssertionEngine:
         atype = assertion.get('type')
         if atype == 'path':
             path = assertion['path']
-            print(path)
             op = assertion['operator']
-            print(op)
             expected = assertion['value']
-            print(expected)
             # Support variable references
             expected = context.resolve(str(expected)) if isinstance(expected, str) else expected
-            print(expected)
             actual = get_value_by_path(actual_value, path)
-            print(actual)
             if not compare_value(actual, op, expected):
                 return False, f"Assertion failed: {path} {op} {expected}, actual={actual}"
             return True, ""
@@ -45,7 +40,15 @@ class AssertionEngine:
             jsonpath_expr = parse(expr)
             matches = jsonpath_expr.find(actual_value)
             actual = [m.value for m in matches]
-            if op == 'eq' and len(actual) == 1:
+            if op == 'exists':
+                if expected:
+                    # 期望存在
+                    return len(actual) > 0, f"JSONPath {expr} {'exists' if len(actual) > 0 else 'not found'}"
+                else:
+                    # 期望不存在
+                    return len(
+                        actual) == 0, f"JSONPath {expr} {'should not exist' if len(actual) > 0 else 'correctly absent'}"
+            elif op == 'eq' and len(actual) == 1:
                 return compare_value(actual[0], 'eq', expected), f"JSONPath {expr} value {actual[0]} != {expected}"
             elif op == 'contains':
                 return expected in actual, f"JSONPath {expr} does not contain {expected}"

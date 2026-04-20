@@ -24,13 +24,16 @@ class Context(dict):
         target[parts[-1]] = value
 
     def resolve(self, text):
-        """解析字符串中的 ${var} 引用"""
         def replacer(match):
             var_path = match.group(1)
             value = self.get_by_path(var_path)
             if value is None:
                 raise ValueError(f"变量 {var_path} 不存在")
-            return repr(value)  # 用 repr 而不是 str
+            # 关键修改：不要用 repr，直接返回字符串值
+            if isinstance(value, str):
+                return value
+            else:
+                return str(value)
 
         return re.sub(r'\$\{([^}]+)\}', replacer, text)
 

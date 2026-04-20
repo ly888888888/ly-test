@@ -131,7 +131,7 @@ def execute_case(case_id, host, run_id=None, host_compare=None):
                         error_info += msg + "; "
                 # 提取变量
                 if case.extract:
-                    extracted = Extractor.extract(response_json, case.extract)
+                    extracted = Extractor.extract(response_json, case.extract, context=context)
                     context.set_by_path(f"steps.{case.name}", extracted)
             response_body = res.text if res else ''
         elif case.test_type == 'compare':

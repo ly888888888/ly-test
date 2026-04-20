@@ -54,6 +54,17 @@ def _resolve_step_from_case(step):
             merged[k] = step[k]
     return merged, None
 
+def _evaluate_assertion(assertion, response_json, context):
+    """评估单个断言（支持普通断言和 OR 组）"""
+    if isinstance(assertion, dict) and assertion.get('type') == 'or':
+        sub_assertions = assertion.get('assertions', [])
+        for sub in sub_assertions:
+            ok, _ = AssertionEngine.assert_one(sub, response_json, context)
+            if ok:
+                return True, ""
+        return False, "OR condition failed: none of the sub-assertions passed"
+    else:
+        return AssertionEngine.assert_one(assertion, response_json, context)
 
 def _execute_http_step(step, host, context):
     step_start = time.time()
@@ -134,8 +145,19 @@ def _execute_http_step(step, host, context):
             'duration_ms': int((step_end - step_start) * 1000),
         }
 
-    response_json = json.loads(res.text) if res else {}
+    # ========== 关键修改：增强响应处理 ==========
     http_status = res.status_code if res else 0
+    response_body = res.text if res else ''
+    response_json = {}
+    if response_body:
+        try:
+            response_json = json.loads(response_body)
+        except json.JSONDecodeError as e:
+            # 记录错误但继续执行，避免流程中断
+            print(f"[WARN] JSON decode error for URL {url}: {e}")
+            print(f"[WARN] Response body (first 200 chars): {response_body[:200]}")
+            # 此时 response_json 保持为空字典
+    # =========================================
 
     step_success = True
     error_msgs = []
@@ -144,14 +166,14 @@ def _execute_http_step(step, host, context):
         step_success = False
         error_msgs.append(f'HTTP status {http_status} != {expected_status}')
     for assertion in step.get('assertions', []):
-        ok, msg = AssertionEngine.assert_one(assertion, response_json, context)
+        ok, msg = _evaluate_assertion(assertion, response_json, context)
         if not ok:
             step_success = False
             error_msgs.append(msg)
 
     extracted = {}
     if step.get('extract'):
-        extracted = Extractor.extract(response_json, step['extract'])
+        extracted = Extractor.extract(response_json, step['extract'], context=context)
         if step.get('name'):
             context.set_by_path(f"steps.{step['name']}", extracted)
 
@@ -162,7 +184,7 @@ def _execute_http_step(step, host, context):
         'status': 'success' if step_success else 'fail',
         'http_status': http_status,
         'error_info': "; ".join(error_msgs) if error_msgs else None,
-        'response_body': res.text if res else None,
+        'response_body': response_body[:65535] if response_body else None,
         'extracted': extracted,
         'api_id': step.get('api_id'),
         'case_id': step.get('case_id'),
@@ -170,7 +192,6 @@ def _execute_http_step(step, host, context):
         'end_time': datetime.fromtimestamp(step_end),
         'duration_ms': int((step_end - step_start) * 1000),
     }
-
 
 def _execute_steps(steps, host, context, depth, max_depth, iteration_index):
     if depth > max_depth:

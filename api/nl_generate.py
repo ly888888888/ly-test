@@ -8,6 +8,18 @@ from models import ApiDefinition, Project
 
 nl_bp = Blueprint('nl_generate', __name__)
 
+def _get_api_id_by_method_path(method, path, project_id):
+    """根据 method、path 和项目 ID 查询接口的真实 ID"""
+    normalized_path = _normalize_path(path)
+    api = ApiDefinition.query.filter_by(
+        project_id=project_id,
+        method=method,
+        path=normalized_path
+    ).first()
+    if api:
+        return api.id
+    else:
+        return None
 
 def extract_project(text):
     """提取项目名称，统一转为小写并去除首尾空格"""
@@ -109,6 +121,10 @@ def _parse_param_value(value_str):
     if value_str.startswith("'") and value_str.endswith("'"):
         value_str = value_str[1:-1]
 
+    if value_str.startswith('template:'):
+        template_name = value_str[9:].strip()
+        return ('template', template_name)
+
     match = re.match(r'^([a-zA-Z_][a-zA-Z0-9_]*)\(\)$', value_str)
     if match:
         func_name = match.group(1)
@@ -155,6 +171,8 @@ def query_to_params(query_dict):
             params[key] = {"type": "function", "function": func_name, "args": args}
         elif typ == 'db_query':
             params[key] = {"type": "db_query", "sql": val}
+        elif typ == 'template':  # 新增
+            params[key] = {"type": "template", "name": val}
     return params
 
 
@@ -217,29 +235,68 @@ def _extract_steps_from_text(text):
         start = m.end()
         end = matches[idx + 1].start() if idx + 1 < len(matches) else len(text)
         block = text[start:end]
-        req_match = re.search(r'请求[:：]\\s*(\\{[\\s\\S]*?\\})(?=\\n|\\r|$)', block)
-        resp_match = re.search(r'响应[:：]\\s*(\\{[\\s\\S]*?\\}|\\[[\\s\\S]*?\\])(?=\\n|\\r|$)', block)
+
+        raw_path = m.group(3)
+        path, query_dict = extract_path_and_query(raw_path)
+        if not path:
+            path = raw_path.split('?')[0]
+        params = query_to_params(query_dict) if query_dict else {}
+
+        # 解析请求体（可选）
+        req_match = re.search(r'请求[:：]\s*(\{[^{}]*\})', block, re.DOTALL)
         req_json = None
-        resp_json = None
         if req_match:
             try:
                 req_json = json.loads(req_match.group(1))
             except Exception:
                 req_json = None
+        if req_json and isinstance(req_json, dict):
+            if 'params' in req_json:
+                params.update(req_json['params'])
+            else:
+                params.update(req_json)
+
+        # 解析响应体
+        resp_match = re.search(r'响应[:：]\s*(\{[^{}]*\}|\[.*?\])', block, re.DOTALL)
+        resp_json = None
         if resp_match:
             try:
                 resp_json = json.loads(resp_match.group(1))
             except Exception:
                 resp_json = None
+
+        # 解析提取规则
+        extract_match = re.search(r'提取[:：]\s*(\{[^{}]*\})', block, re.DOTALL)
+        extract = None
+        if extract_match:
+            try:
+                extract = json.loads(extract_match.group(1))
+            except Exception:
+                extract = None
+
+        # ========== 关键修改：解析断言 ==========
+        assertion_match = re.search(r'断言[:：]\s*(.+?)(?=\n\s*\d+\)|\n\s*\n|$)', block, re.DOTALL)
+        assertions = None
+        if assertion_match:
+            assertion_text = assertion_match.group(1).strip()
+            parsed = parse_assertion_expr(assertion_text)
+            if parsed:
+                if isinstance(parsed, list):
+                    assertions = parsed  # AND 组，多个断言
+                elif isinstance(parsed, dict) and parsed.get('type') == 'or':
+                    assertions = [parsed]  # OR 组，单个特殊断言
+                else:
+                    assertions = [parsed]  # 单个普通断言
         steps.append({
             "index": m.group(1),
             "method": m.group(2).upper(),
-            "path": m.group(3),
-            "request": req_json,
-            "response": resp_json
+            "path": path,
+            "request": {"params": params},
+            "response": resp_json,
+            "extract": extract,
+            "assertions": assertions
         })
     return steps
-
 
 def _extract_flow_with_condition(text):
     cond_match = re.search(r'IF\s*条件[:：]\s*(.+)', text)
@@ -284,13 +341,13 @@ def _extract_simple_extracts(resp_json):
     return extracts
 
 
-def build_flow_steps(parsed_steps, prev_extracted=None):
+def build_flow_steps(parsed_steps, project_id, prev_extracted=None):
     flow_steps = []
     prev_extracted = prev_extracted or {}
     for i, step in enumerate(parsed_steps, start=1):
         if isinstance(step, dict) and step.get("type") == "condition":
-            then_built = build_flow_steps(step.get("then", []), prev_extracted.copy())
-            else_built = build_flow_steps(step.get("else", []), prev_extracted.copy())
+            then_built = build_flow_steps(step.get("then", []), project_id, prev_extracted.copy())
+            else_built = build_flow_steps(step.get("else", []), project_id, prev_extracted.copy())
             flow_steps.append({
                 "type": "condition",
                 "if": step.get("if"),
@@ -300,37 +357,43 @@ def build_flow_steps(parsed_steps, prev_extracted=None):
             continue
 
         name = f"step{i}"
-        raw_req = step["request"] if isinstance(step["request"], dict) else {}
-        params = raw_req.get("params") if "params" in raw_req else raw_req
-        assertions = raw_req.get("assertions")
-        extract = raw_req.get("extract")
+        params = step.get("request", {}).get("params", {})
+        assertions = step.get("assertions")          # 直接使用解析到的断言
+        extract = step.get("extract")
 
+        # 处理参数中的变量引用
         if isinstance(params, dict):
             for k, v in list(params.items()):
-                for ex_key, ex_val in prev_extracted.items():
-                    if v == ex_val:
-                        params[k] = f"${{{ex_key}}}"
+                if isinstance(v, str) and v.startswith('${') and v.endswith('}'):
+                    continue
+                elif isinstance(v, dict):
+                    pass
+                else:
+                    for ex_key, ex_val in prev_extracted.items():
+                        if v == ex_val:
+                            params[k] = f"${{{ex_key}}}"
 
-        extracts = extract if extract is not None else (_extract_simple_extracts(step["response"]) if step["response"] is not None else {})
+        extracts = extract if extract else (_extract_simple_extracts(step["response"]) if step["response"] is not None else {})
         for ex_key in extracts.keys():
-            prev_extracted[f"steps.{name}.{ex_key}"] = step["response"].get(ex_key) if isinstance(step["response"], dict) else None
+            prev_extracted[f"steps.{name}.{ex_key}"] = None
 
-        flow_steps.append({
+        step_obj = {
             "type": "step",
             "name": name,
-            "api_id": "{接口ID_" + name + "}",
-            "params": params if isinstance(params, dict) else {},
-            "assertions": assertions if assertions else None,
-            "extract": extracts if extracts else None
-        })
+            "api_id": _get_api_id_by_method_path(step.get("method"), step.get("path"), project_id),
+            "params": params,
+            "extract": extracts if extracts else None,
+        }
+        if assertions:
+            step_obj["assertions"] = assertions
 
+        flow_steps.append(step_obj)
+
+    # 清理空字段
     for s in flow_steps:
         if s.get("extract") is None:
             s.pop("extract", None)
-        if s.get("assertions") is None:
-            s.pop("assertions", None)
     return flow_steps
-
 
 def is_new_interface(text):
     return re.search(r'新接口|新增接口', text) is not None
@@ -358,19 +421,104 @@ def _parse_value(val_str):
 
 
 def parse_assertion_expr(expr):
+    """解析断言表达式，支持“且”、“或”及单个条件，返回断言对象或列表或 OR 组字典"""
     expr = expr.strip()
-    op_order = ['大于等于', '小于等于', '不等于', '等于', '>=', '<=', '!=', '==', '>', '<', '大于', '小于']
-    for op in op_order:
-        if op in expr:
-            left, right = expr.split(op, 1)
+
+    # 处理“或”（OR 组）
+    if '或' in expr:
+        parts = expr.split('或')
+        or_assertions = []
+        for part in parts:
+            part = part.strip()
+            if part:
+                # 递归解析每个部分（可能包含“且”）
+                sub = parse_assertion_expr(part)
+                if sub:
+                    if isinstance(sub, list):
+                        # 如果子部分是 AND 组，直接展开？不，OR 组内应保持 AND 组作为整体
+                        # 简单起见，将 AND 组作为一个列表存入 OR 组
+                        or_assertions.append(sub)
+                    elif isinstance(sub, dict) and sub.get('type') == 'or':
+                        # 避免嵌套 OR，展平（可选）
+                        or_assertions.extend(sub.get('assertions', []))
+                    else:
+                        or_assertions.append(sub)
+        if or_assertions:
+            return {"type": "or", "assertions": or_assertions}
+
+    # 处理“且”（AND 组，返回列表）
+    if '且' in expr:
+        parts = expr.split('且')
+        and_assertions = []
+        for part in parts:
+            part = part.strip()
+            if part:
+                sub = parse_assertion_expr(part)
+                if sub:
+                    if isinstance(sub, list):
+                        and_assertions.extend(sub)
+                    elif isinstance(sub, dict) and sub.get('type') == 'or':
+                        # OR 组作为整体放入 AND 组
+                        and_assertions.append(sub)
+                    else:
+                        and_assertions.append(sub)
+        return and_assertions if and_assertions else None
+
+    # 单个断言
+    return parse_single_assertion(expr)
+
+
+def parse_single_assertion(expr):
+    """解析单个断言条件，支持：不为空、为空、存在、不存在、比较运算符"""
+    expr = expr.strip()
+
+    # 1. 不为空 -> path ne null
+    if '不为空' in expr:
+        match = re.match(r'^(.+?)不为空$', expr)
+        if match:
+            path = match.group(1).strip()
+            return {"type": "path", "path": path, "operator": "ne", "value": None}
+
+    # 2. 为空 -> path eq null
+    if '为空' in expr:
+        match = re.match(r'^(.+?)为空$', expr)
+        if match:
+            path = match.group(1).strip()
+            return {"type": "path", "path": path, "operator": "eq", "value": None}
+
+    # 3. 存在 -> jsonpath exists true
+    if '存在' in expr and '不' not in expr:
+        match = re.match(r'^(.+?)存在$', expr)
+        if match:
+            path_expr = match.group(1).strip()
+            jsonpath = path_expr if path_expr.startswith('$') else f"$.{path_expr}"
+            return {"type": "jsonpath", "jsonpath": jsonpath, "operator": "exists", "value": True}
+
+    # 4. 不存在 -> jsonpath exists false
+    if '不存在' in expr:
+        match = re.match(r'^(.+?)不存在$', expr)
+        if match:
+            path_expr = match.group(1).strip()
+            jsonpath = path_expr if path_expr.startswith('$') else f"$.{path_expr}"
+            return {"type": "jsonpath", "jsonpath": jsonpath, "operator": "exists", "value": False}
+
+    # 5. 比较运算符（包括中文和符号）
+    op_map = {
+        '大于等于': 'ge', '小于等于': 'le', '不等于': 'ne', '等于': 'eq',
+        '>=': 'ge', '<=': 'le', '!=': 'ne', '==': 'eq',
+        '>': 'gt', '<': 'lt', '大于': 'gt', '小于': 'lt'
+    }
+    for op_text, op_code in op_map.items():
+        if op_text in expr:
+            left, right = expr.split(op_text, 1)
             return {
                 "type": "path",
                 "path": left.strip(),
-                "operator": _normalize_operator(op),
+                "operator": op_code,
                 "value": _parse_value(right.strip())
             }
-    return None
 
+    return None
 
 def _extract_assertion_texts(text, keywords):
     results = []
@@ -383,6 +531,18 @@ def _extract_assertion_texts(text, keywords):
 
 
 def extract_assertions(text, test_type):
+    # 新增：尝试提取通用自然语言断言（格式：断言: ...）
+    general_match = re.search(r'断言[:：]\s*(.+?)(?=\n|$)', text)
+    if general_match:
+        expr = general_match.group(1).strip()
+        result = parse_assertion_expr(expr)
+        if result:
+            # 如果是列表，直接返回；否则包装为列表
+            if isinstance(result, list):
+                return result
+            elif result:
+                return [result]
+
     keyword_map = {
         'smoke': ['smoke', '冒烟', '冒烟测试'],
         'structural': ['structural', '结构', '结构测试'],
@@ -627,13 +787,17 @@ def generate():
             testcases.append(payload)
 
     if parsed_steps:
-        flow_steps = build_flow_steps(parsed_steps)
-        flow_name = f"flow_{safe_path}"
-        flow_payload = {
-            "name": flow_name,
-            "steps": flow_steps,
-            "enabled": True
-        }
+        try:
+            flow_steps = build_flow_steps(parsed_steps, project_obj.id)
+            flow_name = f"flow_{safe_path}"
+            flow_payload = {
+                "name": flow_name,
+                "project": project_obj.name,
+                "steps": flow_steps,
+                "enabled": True
+            }
+        except ValueError as e:
+            return jsonify({'error': str(e), 'expected': _expected_example()}), 400
 
     # 返回结果
     return jsonify({

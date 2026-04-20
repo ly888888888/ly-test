@@ -195,7 +195,6 @@ def ensure_default_admin(username, password, permissions=None):
 def ensure_default_projects():
     """初始化默认项目，确保系统有可用的项目"""
     default_projects = [
-        {'name': 'demo', 'description': '演示项目', 'enabled': True},
         {'name': 'edubox', 'description': '教育盒子项目', 'enabled': True},
         {'name': 'jupiter', 'description': 'Jupiter项目', 'enabled': True},
     ]

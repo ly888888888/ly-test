@@ -104,6 +104,43 @@ def check_tabs(response_json, brand, version):
         return False, f"缺少tab: {missing}"
     return True, ""
 
+@register
+def getFeSubject():
+    """
+    从 fe_subject 表随机获取一个subject_id
+    """
+    connection = TestDB.get_connection()
+    try:
+        with connection.cursor() as cursor:
+            sql = f"SELECT subject_id FROM db_fun_edu.fe_subject ORDER BY RAND() LIMIT 1"
+            cursor.execute(sql)
+            results = cursor.fetchall()
+            ids = [str(i[0]) for i in results]
+            return ",".join(ids)
+    finally:
+        connection.close()
+
+@register
+def random_list(num_list: list) -> any:
+    """
+    从非空列表中随机返回一个元素
+
+    Args:
+        num_list: 任意非空列表
+
+    Returns:
+        随机选中的列表元素
+
+    Raises:
+        ValueError: 当传入空列表时抛出异常
+    """
+    if not isinstance(num_list, list):
+        raise TypeError("参数必须是列表类型")
+
+    if len(num_list) == 0:
+        raise ValueError("列表不能为空，请传入非空列表")
+
+    return random.choice(num_list)
 
 if __name__ == '__main__':
-    print(randomVer())
+    print(getFeSubject())
