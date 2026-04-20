@@ -4,7 +4,7 @@ from werkzeug.security import generate_password_hash
 
 db = SQLAlchemy()
 
-# ---------- 新增 Project 模型 ----------
+# ---------- Project 模型 ----------
 class Project(db.Model):
     __tablename__ = 'project'
     id = db.Column(db.Integer, primary_key=True)
@@ -17,6 +17,7 @@ class Project(db.Model):
     # 关联
     apis = db.relationship('ApiDefinition', backref='project_ref', lazy=True)
     flows = db.relationship('TestFlow', backref='project_ref', lazy=True)
+    test_cases = db.relationship('TestCase', backref='project_ref', lazy=True)
 
 
 class User(db.Model):
@@ -57,7 +58,7 @@ class UserToken(db.Model):
 class ApiDefinition(db.Model):
     __tablename__ = 'api_definition'
     id = db.Column(db.Integer, primary_key=True)
-    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)   # 改为外键
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
     path = db.Column(db.String(255), nullable=False)
     method = db.Column(db.String(10), default='GET')
     schema = db.Column(db.JSON)
@@ -69,7 +70,6 @@ class ApiDefinition(db.Model):
 
     @property
     def project(self):
-        """兼容前端，返回项目名称"""
         return self.project_ref.name if self.project_ref else None
 
 
@@ -86,7 +86,7 @@ class ParamTemplate(db.Model):
 class TestCase(db.Model):
     __tablename__ = 'test_case'
     id = db.Column(db.Integer, primary_key=True)
-    project = db.Column(db.String(50), nullable=False)   # 用例的项目字段可以保留字符串，或者也改为外键，为了简单暂时保留
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
     api_id = db.Column(db.Integer, db.ForeignKey('api_definition.id'), nullable=False)
@@ -100,6 +100,10 @@ class TestCase(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     results = db.relationship('TestResult', backref='case', lazy=True)
+
+    @property
+    def project(self):
+        return self.project_ref.name if self.project_ref else None
 
 
 class TestResult(db.Model):
@@ -121,7 +125,7 @@ class TestFlow(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(200), nullable=False)
     description = db.Column(db.Text)
-    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)   # 改为外键
+    project_id = db.Column(db.Integer, db.ForeignKey('project.id'), nullable=False)
     steps = db.Column(db.JSON, nullable=False)
     data_source = db.Column(db.JSON, nullable=True)
     enabled = db.Column(db.Boolean, default=True)
@@ -193,16 +197,5 @@ def ensure_default_admin(username, password, permissions=None):
 
 
 def ensure_default_projects():
-    """初始化默认项目，确保系统有可用的项目"""
-    default_projects = [
-        {'name': 'edubox', 'description': '教育盒子项目', 'enabled': True},
-        {'name': 'jupiter', 'description': 'Jupiter项目', 'enabled': True},
-    ]
-    for proj in default_projects:
-        if not Project.query.filter_by(name=proj['name']).first():
-            db.session.add(Project(
-                name=proj['name'],
-                description=proj['description'],
-                enabled=proj['enabled']
-            ))
-    db.session.commit()
+    """不再自动创建默认项目，由用户手动创建"""
+    pass

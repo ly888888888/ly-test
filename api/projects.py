@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from models import db, Project
+from models import db, Project, TestCase, ApiDefinition  # 确保导入 TestCase
 from api.auth import require_permissions
 
 projects_bp = Blueprint('projects', __name__)
@@ -14,7 +14,8 @@ def list_projects():
         'name': p.name,
         'description': p.description,
         'enabled': p.enabled,
-        'created_at': p.created_at.isoformat() if p.created_at else None
+        'created_at': p.created_at.isoformat() if p.created_at else None,
+        'updated_at': p.updated_at.isoformat() if p.updated_at else None
     } for p in projects])
 
 @projects_bp.route('', methods=['POST'])
@@ -39,15 +40,15 @@ def create_project():
 @projects_bp.route('/<int:project_id>', methods=['PUT'])
 @require_permissions('project:write')
 def update_project(project_id):
-    """更新项目信息（包括启用/禁用）"""
     project = Project.query.get_or_404(project_id)
     data = request.get_json() or {}
     if 'name' in data:
-        # 检查重名（排除自身）
-        existing = Project.query.filter(Project.name == data['name'], Project.id != project_id).first()
-        if existing:
-            return jsonify({'error': '项目名称已存在'}), 409
-        project.name = data['name']
+        new_name = data['name'].strip()
+        if new_name != project.name:
+            existing = Project.query.filter(Project.name == new_name, Project.id != project_id).first()
+            if existing:
+                return jsonify({'error': '项目名称已存在'}), 409
+            project.name = new_name
     if 'description' in data:
         project.description = data['description']
     if 'enabled' in data:
