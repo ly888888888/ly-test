@@ -673,11 +673,11 @@ def _expected_example():
 def generate():
     data = request.get_json() or {}
     text = data.get('text', '')
+    mode = data.get('mode', 'testcase')  # 新增：interface, testcase, flow
     if not text:
         return jsonify({'error': 'text required', 'expected': _expected_example()}), 400
 
     project = extract_project(text).strip().lower()
-    # 检查项目是否存在（忽略大小写）
     project_obj = Project.query.filter(Project.name.ilike(project)).first()
     if not project_obj:
         return jsonify({
@@ -695,71 +695,88 @@ def generate():
         return jsonify({'error': '未找到接口路径', 'expected': _expected_example()}), 400
     method = extract_method(text)
 
-    has_flow = re.search(r'测试流程|多步流程|多步接口用例|流程步骤', text) is not None
+    # 根据模式决定流程标志和响应 JSON 要求
+    if mode == 'flow':
+        has_flow = True
+        # 流程模式：响应 JSON 可选（可能没有）
+        response_json = extract_response_json(text)
+    elif mode == 'interface':
+        has_flow = False
+        # 接口模式：响应 JSON 可选，如果没有则使用空对象
+        response_json = extract_response_json(text) or {}
+    else:  # testcase
+        has_flow = re.search(r'测试流程|多步流程|多步接口用例|流程步骤', text) is not None
+        response_json = extract_response_json(text)
+        if response_json is None and not has_flow:
+            return jsonify({'error': '未找到返回JSON', 'expected': _expected_example()}), 400
 
-    response_json = extract_response_json(text)
-    if response_json is None and not has_flow:
-        return jsonify({'error': '未找到返回JSON', 'expected': _expected_example()}), 400
-
-    schema = generate_schema(response_json) if response_json is not None else {
+    # 生成 schema
+    schema = generate_schema(response_json) if response_json else {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object"
     }
     base_params = query_to_params(query)
     safe_path = path.lstrip('/').replace('/', '_')
 
-    requested_tests = extract_requested_tests(text)
-    if has_flow and not has_explicit_test_request(text):
+    # 根据模式处理测试类型、接口创建标志、流程步骤
+    if mode == 'interface':
+        create_interface = True
         requested_tests = []
-    elif requested_tests is None:
-        if has_flow:
-            requested_tests = []
+        parsed_steps = []
+    elif mode == 'flow':
+        create_interface = False
+        requested_tests = []
+        # 解析流程步骤
+        if re.search(r'IF\s*条件[:：]', text):
+            parsed_steps = _extract_flow_with_condition(text)
         else:
-            requested_tests = ['smoke', 'structural', 'logic', 'compare', 'monitor']
+            parsed_steps = _extract_steps_from_text(text) if has_flow else []
+        step_assertions = extract_step_assertions(text)
+        if parsed_steps and step_assertions:
+            apply_step_assertions(parsed_steps, step_assertions)
+    else:  # testcase
+        requested_tests = extract_requested_tests(text)
+        if has_flow and not has_explicit_test_request(text):
+            requested_tests = []
+        elif requested_tests is None:
+            if has_flow:
+                requested_tests = []
+            else:
+                requested_tests = ['smoke', 'structural', 'logic', 'compare', 'monitor']
+        create_interface = is_new_interface(text) or is_only_create_interface(text)
+        parsed_steps = []
 
-    create_interface = is_new_interface(text) or is_only_create_interface(text)
-
-    if has_flow and re.search(r'IF\s*条件[:：]', text):
-        parsed_steps = _extract_flow_with_condition(text)
-    else:
-        parsed_steps = _extract_steps_from_text(text) if has_flow else []
-    step_assertions = extract_step_assertions(text)
-    if parsed_steps and step_assertions:
-        apply_step_assertions(parsed_steps, step_assertions)
-
-    need_validation = has_flow or (requested_tests is not None and len(requested_tests) > 0)
-    if need_validation and not project_exists(project):
-        return jsonify({'error': f'项目不存在: {project}', 'expected': _expected_example()}), 400
-    if has_flow and parsed_steps:
+    # 接口存在性校验（仅 testcase 和 flow 需要）
+    if mode == 'testcase':
+        main_path = _normalize_path(path)
+        if not interface_exists(project, main_path, method):
+            return jsonify({'error': f'接口不存在: {project} {method} {main_path}，请先创建接口', 'expected': _expected_example()}), 400
+    elif mode == 'flow' and parsed_steps:
         missing = _collect_missing_interfaces(project, parsed_steps)
         if missing:
             details = "\n".join([f"步骤{m['index']} {m['method']} {m['path']}" for m in missing])
             return jsonify({'error': f'流程步骤接口不存在:\n{details}', 'expected': _expected_example()}), 400
-    if not has_flow and requested_tests:
-        main_path = _normalize_path(path)
-        if not interface_exists(project, main_path, method):
-            return jsonify({'error': f'接口不存在: {project} {method} {main_path}', 'expected': _expected_example()}), 400
 
-    # --- 查询真实接口 ID ---
+    # 查询真实接口 ID（用于 testcase）
     real_api_id = 0
-    if not has_flow and requested_tests:
+    if mode == 'testcase' and requested_tests:
         main_path = _normalize_path(path)
-        proj = Project.query.filter(Project.name.ilike(project)).first()
-        if proj:
-            api_def = ApiDefinition.query.filter_by(project_id=proj.id, path=main_path, method=method).first()
-            if api_def:
-                real_api_id = api_def.id
-            else:
-                print(f"Warning: 未找到接口 {project} {method} {main_path}，使用 api_id=0")
+        api_def = ApiDefinition.query.filter_by(project_id=project_obj.id, path=main_path, method=method).first()
+        if api_def:
+            real_api_id = api_def.id
+        else:
+            print(f"Warning: 未找到接口 {project} {method} {main_path}，使用 api_id=0")
 
-    # 不再生成文件，只构建返回数据
+    # 构建返回数据
     interface_payload = None
     if create_interface:
         interface_payload = generate_interface_payload(project, path, method, schema, f"自动创建接口: {path}")
 
     testcases = []
     flow_payload = None
-    if requested_tests:
+
+    if mode == 'testcase' and requested_tests:
+        # 生成用例
         if 'smoke' in requested_tests:
             smoke_assertions = extract_assertions(text, 'smoke')
             payload = generate_testcase_payload(project, 'smoke', f"{path} 冒烟测试", base_params, real_api_id, assertions=smoke_assertions or None, expected_status=200)
@@ -786,7 +803,7 @@ def generate():
             payload = generate_testcase_payload(project, 'monitor', f"{path} 监控测试", base_params, real_api_id, assertions=monitor_assertions or None)
             testcases.append(payload)
 
-    if parsed_steps:
+    if mode == 'flow' and parsed_steps:
         try:
             flow_steps = build_flow_steps(parsed_steps, project_obj.id)
             flow_name = f"flow_{safe_path}"
