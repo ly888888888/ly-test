@@ -662,8 +662,7 @@ def _collect_missing_interfaces(project, parsed_steps):
 def _expected_example():
     return (
         "示例格式:\n"
-        "/add-interface-curl-py 我现在有个新接口,GET请求,edubox项目,请求路由和参数:/edu/funclock/homepage/english?isencode=1,"
-        "接口请求返回结果:{\"retCode\":\"200\",\"retMsg\":\"ok\",\"data\":[]}\n"
+        "我现在有个接口,GET请求,edubox项目,请求路由和参数:/edu/funclock/homepage/english?isencode=1,"
         "如果是流程，仍需包含返回结果块。"
     )
 
@@ -673,7 +672,7 @@ def _expected_example():
 def generate():
     data = request.get_json() or {}
     text = data.get('text', '')
-    mode = data.get('mode', 'testcase')  # 新增：interface, testcase, flow
+    mode = data.get('mode', 'testcase')  # interface, testcase, flow
     if not text:
         return jsonify({'error': 'text required', 'expected': _expected_example()}), 400
 
@@ -698,19 +697,15 @@ def generate():
     # 根据模式决定流程标志和响应 JSON 要求
     if mode == 'flow':
         has_flow = True
-        # 流程模式：响应 JSON 可选（可能没有）
-        response_json = extract_response_json(text)
+        response_json = extract_response_json(text)  # 可选
     elif mode == 'interface':
         has_flow = False
-        # 接口模式：响应 JSON 可选，如果没有则使用空对象
-        response_json = extract_response_json(text) or {}
+        response_json = extract_response_json(text) or {}  # 接口模式必须提供响应，否则用空对象（会报错但后续会提示）
     else:  # testcase
         has_flow = re.search(r'测试流程|多步流程|多步接口用例|流程步骤', text) is not None
-        response_json = extract_response_json(text)
-        if response_json is None and not has_flow:
-            return jsonify({'error': '未找到返回JSON', 'expected': _expected_example()}), 400
+        response_json = extract_response_json(text)  # 可选，不再强制要求
 
-    # 生成 schema
+    # 生成 schema（若没有响应 JSON 则使用空对象）
     schema = generate_schema(response_json) if response_json else {
         "$schema": "http://json-schema.org/draft-07/schema#",
         "type": "object"
@@ -718,7 +713,7 @@ def generate():
     base_params = query_to_params(query)
     safe_path = path.lstrip('/').replace('/', '_')
 
-    # 根据模式处理测试类型、接口创建标志、流程步骤
+    # 根据模式处理
     if mode == 'interface':
         create_interface = True
         requested_tests = []
@@ -776,31 +771,17 @@ def generate():
     flow_payload = None
 
     if mode == 'testcase' and requested_tests:
-        # 生成用例
-        if 'smoke' in requested_tests:
-            smoke_assertions = extract_assertions(text, 'smoke')
-            payload = generate_testcase_payload(project, 'smoke', f"{path} 冒烟测试", base_params, real_api_id, assertions=smoke_assertions or None, expected_status=200)
-            testcases.append(payload)
-        if 'structural' in requested_tests:
-            structural_assertions = extract_assertions(text, 'structural')
-            payload = generate_testcase_payload(project, 'structural', f"{path} 结构测试", base_params, real_api_id, assertions=structural_assertions or None)
-            testcases.append(payload)
-        if 'logic' in requested_tests:
-            logic_cases = extract_assertions(text, 'logic')
-            if logic_cases and isinstance(logic_cases, list) and logic_cases and isinstance(logic_cases[0], list):
-                for idx, assertions in enumerate(logic_cases, start=1):
-                    payload = generate_testcase_payload(project, 'logic', f"{path} 逻辑测试{idx}", base_params, real_api_id, assertions=assertions)
-                    testcases.append(payload)
-            else:
-                payload = generate_testcase_payload(project, 'logic', f"{path} 逻辑测试", base_params, real_api_id)
-                testcases.append(payload)
-        if 'compare' in requested_tests:
-            compare_assertions = extract_assertions(text, 'compare')
-            payload = generate_testcase_payload(project, 'compare', f"{path} 对比测试", base_params, real_api_id, assertions=compare_assertions or None)
-            testcases.append(payload)
-        if 'monitor' in requested_tests:
-            monitor_assertions = extract_assertions(text, 'monitor')
-            payload = generate_testcase_payload(project, 'monitor', f"{path} 监控测试", base_params, real_api_id, assertions=monitor_assertions or None)
+        # 生成用例（使用现有的 base_params 和从文本中解析的断言）
+        for test_type in requested_tests:
+            assertions = extract_assertions(text, test_type)  # 从文本中解析断言
+            # 生成用例名称后缀
+            name_suffix = f"{path} {test_type}测试"
+            payload = generate_testcase_payload(
+                project, test_type, name_suffix,
+                base_params, real_api_id,
+                assertions=assertions if assertions else None,
+                expected_status=200 if test_type == 'smoke' else None
+            )
             testcases.append(payload)
 
     if mode == 'flow' and parsed_steps:
@@ -816,7 +797,6 @@ def generate():
         except ValueError as e:
             return jsonify({'error': str(e), 'expected': _expected_example()}), 400
 
-    # 返回结果
     return jsonify({
         'interfacePayload': interface_payload,
         'testcases': testcases,
