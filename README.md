@@ -12,7 +12,7 @@ curl -X POST http://172.17.7.156:5000/api/login \
 curl -X POST http://172.17.7.156:5000/api/interfaces \
   -H "Content-Type: application/json" \
   -d '{
-    "project": "jupiter",
+    "project": "tv",
     "path": "/config/homepage/v4",
     "method": "GET",
     "schema": {
@@ -81,7 +81,7 @@ curl -X POST http://172.17.7.156:5000/api/interfaces \
 curl -X POST http://172.17.7.156:5000/api/testcases \
   -H "Content-Type: application/json" \
   -d '{
-    "project": "jupiter",
+    "project": "tv",
     "name": "/config/homepage/v4 冒烟测试",
     "api_id": 10,
     "test_type": "smoke",
@@ -99,7 +99,7 @@ curl -X POST http://172.17.7.156:5000/api/testcases \
 curl -X POST http://172.17.7.156:5000/api/testcases \
   -H "Content-Type: application/json" \
   -d '{
-    "project": "jupiter",
+    "project": "tv",
     "name": "/config/homepage/v4 结构测试",
     "api_id": 10,
     "test_type": "structural",
@@ -117,7 +117,7 @@ bash
 curl -X POST http://172.17.7.156:5000/api/testcases \
   -H "Content-Type: application/json" \
   -d '{
-    "project": "jupiter",
+    "project": "tv",
     "name": "/config/homepage/v4 对比测试",
     "api_id": 10,
     "test_type": "compare",
@@ -141,7 +141,7 @@ funshion 品牌期望 desktop=1704 为例
 curl -X POST http://172.17.7.156:5000/api/testcases \
   -H "Content-Type: application/json" \
   -d '{
-    "project": "jupiter",
+    "project": "tv",
     "name": "/config/homepage/v4 逻辑测试 - funshion desktop=1704",
     "api_id": 10,
     "test_type": "logic",
@@ -166,7 +166,7 @@ curl -X POST http://172.17.7.156:5000/api/testcases \
 curl -X POST http://172.17.7.156:5000/api/testcases \
   -H "Content-Type: application/json" \
   -d '{
-    "project": "jupiter",
+    "project": "tv",
     "name": "/config/homepage/v4 监控测试 - funshion tab检�?,
     "api_id": 10,
     "test_type": "monitor",
@@ -194,7 +194,7 @@ curl -X POST http://172.17.7.156:5000/api/testcases \
 curl -X POST http://172.17.7.156:5000/api/testcases \
   -H "Content-Type: application/json" \
   -d '{
-    "project": "jupiter",
+    "project": "tv",
     "name": "/config/homepage/v4 监控结构测试",
     "api_id": 11,
     "test_type": "structural",
@@ -271,7 +271,7 @@ curl http://172.17.7.156:5000/api/run/results/<run_id>
 # 新增加api
 ## Interfaces CRUD
 ```text
-curl http://172.17.7.156:5000/api/interfaces?project=jupiter&path=/config/homepage/v4&method=GET
+curl http://172.17.7.156:5000/api/interfaces?project=tv&path=/config/homepage/v4&method=GET
 curl http://172.17.7.156:5000/api/interfaces/10
 curl -X PUT http://172.17.7.156:5000/api/interfaces/10 -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"description":"update"}'
 curl -X DELETE http://172.17.7.156:5000/api/interfaces/10 -H "Authorization: Bearer <token>"
@@ -280,7 +280,7 @@ curl -X DELETE http://172.17.7.156:5000/api/interfaces/10 -H "Authorization: Bea
 
 ## Testcases CRUD
 ```text
-curl http://172.17.7.156:5000/api/testcases?project=jupiter&api_id=10
+curl http://172.17.7.156:5000/api/testcases?project=tv&api_id=10
 curl http://172.17.7.156:5000/api/testcases/30
 curl -X PUT http://172.17.7.156:5000/api/testcases/30 -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"enabled":false}'
 curl -X DELETE http://172.17.7.156:5000/api/testcases/30 -H "Authorization: Bearer <token>"
